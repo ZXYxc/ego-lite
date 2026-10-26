@@ -1599,6 +1599,158 @@ test("TaskSpace finish closes the whole space when no Pages are retained", async
   });
 });
 
+function finishFixtureTask(fixture, lifecycleCalls) {
+  const ledger = new PageLedgerStore({ rootDir: fixture.rootDir });
+  const task = taskForRound(fixture, "round-a", {
+    ledger,
+    async completeTaskSpace() {
+      lifecycleCalls.push("finish");
+    },
+    async closeTaskSpace() {
+      lifecycleCalls.push("close");
+    },
+  });
+  return { ledger, task };
+}
+
+test("TaskSpace finish closes the space after the only Page was closed", async () => {
+  await withFixture(async (fixture) => {
+    const lifecycleCalls = [];
+    const { ledger, task } = finishFixtureTask(fixture, lifecycleCalls);
+    const p1 = await openTestPage(task, "https://example.test/one");
+    await p1.close();
+
+    const tabs = await task.tabs();
+    assert.equal(tabs.length, 1, "page.close leaves a blank anchor tab");
+    assert.equal(tabs[0].label, undefined, "the anchor stays unmanaged");
+    assert.equal(tabs[0].openedBy, "agent", "the anchor is SDK-owned");
+
+    const receipt = await task.finish({ keep: [] });
+
+    assert.deepEqual(receipt, {
+      spaceId: 7,
+      closedSpace: true,
+      keptManagedLabels: [],
+      closedManagedLabels: [],
+      preservedUnmanagedCount: 0,
+    });
+    assert.deepEqual(lifecycleCalls, ["close"]);
+    assert.deepEqual((await ledger.read(7)).pages, {});
+  });
+});
+
+test("TaskSpace finish closes the space when a new Page follows the last close", async () => {
+  await withFixture(async (fixture) => {
+    const lifecycleCalls = [];
+    const { task } = finishFixtureTask(fixture, lifecycleCalls);
+    const p1 = await openTestPage(task, "https://example.test/one");
+    await p1.close();
+    const p2 = await openTestPage(task, "https://example.test/two");
+    assert.equal(p2.label, "p2");
+    assert.equal((await task.tabs()).length, 2, "anchor and p2 are live");
+
+    const receipt = await task.finish({ keep: [] });
+
+    assert.deepEqual(receipt, {
+      spaceId: 7,
+      closedSpace: true,
+      keptManagedLabels: [],
+      closedManagedLabels: ["p2"],
+      preservedUnmanagedCount: 0,
+    });
+    assert.deepEqual(lifecycleCalls, ["close"]);
+  });
+});
+
+test("TaskSpace finish closes the SDK anchor tab when a Page is kept", async () => {
+  await withFixture(async (fixture) => {
+    const lifecycleCalls = [];
+    const { task } = finishFixtureTask(fixture, lifecycleCalls);
+    const p1 = await openTestPage(task, "https://example.test/one");
+    await p1.close();
+    const anchorTargetId = (await task.tabs())[0].targetId;
+    const p2 = await openTestPage(task, "https://example.test/two");
+
+    const receipt = await task.finish({ keep: ["p2"] });
+
+    assert.deepEqual(receipt, {
+      spaceId: 7,
+      closedSpace: false,
+      keptManagedLabels: ["p2"],
+      closedManagedLabels: [],
+      preservedUnmanagedCount: 0,
+    });
+    assert.deepEqual(lifecycleCalls, ["finish"]);
+    assert.equal(
+      fixture.tabs.has(anchorTargetId),
+      false,
+      "the anchor is closed",
+    );
+    assert.equal(fixture.tabs.has(p2.targetId), true, "the kept Page remains");
+  });
+});
+
+test("TaskSpace finish closes the SDK anchor tab but keeps user tabs", async () => {
+  await withFixture(async (fixture) => {
+    const lifecycleCalls = [];
+    const { ledger, task } = finishFixtureTask(fixture, lifecycleCalls);
+    const p1 = await openTestPage(task, "https://example.test/one");
+    await p1.close();
+    const anchorTargetId = (await task.tabs())[0].targetId;
+    fixture.addExternalTab("target-user", "https://example.test/user");
+    await ledger.keepUnmanaged(7, "target-user", "unknown");
+    const p2 = await openTestPage(task, "https://example.test/two");
+
+    const receipt = await task.finish({ keep: [] });
+
+    assert.deepEqual(receipt, {
+      spaceId: 7,
+      closedSpace: false,
+      keptManagedLabels: [],
+      closedManagedLabels: ["p2"],
+      preservedUnmanagedCount: 1,
+    });
+    assert.equal(
+      fixture.tabs.has(p2.targetId),
+      false,
+      "the Agent Page is closed",
+    );
+    assert.deepEqual(lifecycleCalls, ["finish"]);
+    assert.equal(
+      fixture.tabs.has(anchorTargetId),
+      false,
+      "the anchor is closed",
+    );
+    assert.equal(fixture.tabs.has("target-user"), true, "the user tab remains");
+  });
+});
+
+test("TaskSpace finish keeps an SDK anchor that is the last tab of a kept space", async () => {
+  await withFixture(async (fixture) => {
+    const lifecycleCalls = [];
+    const { task } = finishFixtureTask(fixture, lifecycleCalls);
+    const p1 = await openTestPage(task, "https://example.test/one");
+    await p1.close();
+    const anchorTargetId = (await task.tabs())[0].targetId;
+
+    const receipt = await task.finish({ keep: "all" });
+
+    assert.deepEqual(receipt, {
+      spaceId: 7,
+      closedSpace: false,
+      keptManagedLabels: [],
+      closedManagedLabels: [],
+      preservedUnmanagedCount: 0,
+    });
+    assert.deepEqual(lifecycleCalls, ["finish"]);
+    assert.equal(
+      fixture.tabs.has(anchorTargetId),
+      true,
+      "closing the last tab would destroy the space the caller kept",
+    );
+  });
+});
+
 test("TaskSpace finish keeps protected unmanaged tabs even with an empty keep list", async () => {
   await withFixture(async (fixture) => {
     const lifecycleCalls = [];
