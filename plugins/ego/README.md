@@ -43,7 +43,7 @@ Copilot CLI deprecates installing a plugin directly from a local path.
 
 The three npm packages have separate names and exports so their adapters cannot
 be confused by package caches. All ten packages contain real Skill files;
-none depends on the source checkout or its symlink.
+none depends on the source checkout.
 
 Every host that reads a plugin logo uses the Skill's
 `assets/logo.png`: Codex `interface.logo`, Claude Code `icon`, Cursor `logo`,
@@ -63,8 +63,25 @@ previous artifacts intact. Older universal ZIP/npm outputs outside the version
 directory are left untouched and are no longer generated.
 
 Packaging requires Node.js, npm, `zip`, and `unzip`. Run this command instead of
-`npm pack` in the source directory: npm omits the linked Skill when packing the
-source directly.
+`npm pack` in the source directory: the source package mixes every host's entry
+points, while each npm artifact carries only its own.
+
+## Repository distribution
+
+`plugins/ego` is a complete plugin directory: its `skills/ego-browser` holds real
+files, not a link. Hosts and plugin directories that read a plugin straight
+from Git can therefore use this repository, with `plugins/ego` as the plugin
+path. The repository root carries the marketplace files that point there:
+
+| File                               | Read by                                    |
+| ---------------------------------- | ------------------------------------------ |
+| `.claude-plugin/marketplace.json`  | Claude Code, GitHub Copilot CLI, WorkBuddy |
+| `.agents/plugins/marketplace.json` | Codex                                      |
+| `.cursor-plugin/marketplace.json`  | Cursor                                     |
+
+Directory submissions that take a repository instead of an archive, such as the
+Claude plugin directory, awesome-copilot, the Cursor Marketplace, and the Grok
+plugin marketplace, use the same plugin path.
 
 ## Installation
 
@@ -107,6 +124,14 @@ codex plugin add ego@ego-codex-local
 
 Restart Codex if the plugin does not appear, then ask it to use `$ego-browser`.
 Remove the installed plugin with `codex plugin remove ego@ego-codex-local`.
+
+The repository is a Codex marketplace too, at the version on its default
+branch:
+
+```bash
+codex plugin marketplace add citrolabs/ego-lite
+codex plugin add ego@ego-agent-skills
+```
 
 To publish, upload the same ZIP as a skills-only plugin in the submission
 portal and select the verified developer identity that matches `author.name`.
@@ -299,11 +324,18 @@ EOF
 
 ## Development
 
-`skills/ego-browser` is a relative symlink to `../../../skills/ego-browser`.
-It is the thin entry Skill; the usage guide it points to lives in
+`skills/ego-browser` here is a copy of the canonical `skills/ego-browser` at the
+repository root, the thin entry Skill. The usage guide it points to lives in
 `package/ego-browser/skill-body/SKILL.md` and ships with ego lite. Edit the
-canonical entry Skill; the packager materializes it in temporary directories
-and leaves the source link untouched. Unexpected or broken links fail packaging.
+canonical Skill, then refresh the copy:
+
+```bash
+npm --prefix plugins/ego run sync-skills
+```
+
+The plugin tests fail while the copy differs from the canonical Skill. The
+packager builds every artifact from the canonical Skill, and unexpected or
+broken links fail packaging.
 
 Plugin tests belong in `plugins/ego/tests/` and run independently of browser
 runtime tests:

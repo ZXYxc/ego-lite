@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
+import { basename } from "node:path";
 import test from "node:test";
 
 const repoFile = (path) => new URL(`../../../${path}`, import.meta.url);
@@ -169,14 +170,30 @@ test("versioned guide restores v2 Pages across script rounds", () => {
   );
 });
 
-test("source plugin links directly to the canonical Skill", () => {
+test("source plugin carries an exact copy of the canonical Skill", () => {
   const canonicalRoot = "skills/ego-browser";
-  const packagedRoot = `${claudePluginRoot}/skills/ego-browser`;
-  assert.equal(lstatSync(repoFile(packagedRoot)).isSymbolicLink(), true);
-  assert.equal(
-    realpathSync(repoFile(packagedRoot)),
-    realpathSync(repoFile(canonicalRoot)),
-  );
+  const copyRoot = `${claudePluginRoot}/skills/ego-browser`;
+  const sync = "run `npm --prefix plugins/ego run sync-skills`";
+  // Hosts that install the plugin straight from Git drop links that leave
+  // the plugin root, so the copy must be real files.
+  assert.equal(lstatSync(repoFile(copyRoot)).isSymbolicLink(), false);
+  const files = (root) =>
+    readdirSync(repoFile(root), { recursive: true })
+      .filter(
+        (path) =>
+          basename(path) !== ".DS_Store" &&
+          lstatSync(repoFile(`${root}/${path}`)).isFile(),
+      )
+      .sort();
+  const canonicalFiles = files(canonicalRoot);
+  assert.deepEqual(files(copyRoot), canonicalFiles, `${copyRoot}: ${sync}`);
+  for (const path of canonicalFiles) {
+    assert.deepEqual(
+      readFileSync(repoFile(`${copyRoot}/${path}`)),
+      readFileSync(repoFile(`${canonicalRoot}/${path}`)),
+      `${copyRoot}/${path} differs from the canonical Skill: ${sync}`,
+    );
+  }
 });
 
 test("versioned guide preserves TaskSpace safety policy", () => {

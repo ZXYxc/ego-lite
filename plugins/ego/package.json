@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test \"tests/**/*.test.mjs\"",
-    "package": "node ../scripts/package-plugins.mjs ego"
+    "package": "node ../scripts/package-plugins.mjs ego",
+    "sync-skills": "node ../scripts/sync-skills.mjs ego"
   },
   "exports": {
     ".": "./index.js",

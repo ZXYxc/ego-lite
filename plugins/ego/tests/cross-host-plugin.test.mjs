@@ -107,6 +107,21 @@ test("Claude compatibility files expose only the portable Skill", () => {
   assertMissing(`${pluginRoot}/.mcp.json`);
 });
 
+test("Cursor marketplace routes the repository to the plugin", () => {
+  const marketplace = json(".cursor-plugin/marketplace.json");
+  const plugin = json(`${pluginRoot}/.cursor-plugin/plugin.json`);
+
+  assert.equal(marketplace.name, "ego-agent-skills");
+  assert.equal(marketplace.owner.name, plugin.author.name);
+  assert.deepEqual(marketplace.plugins, [
+    {
+      name: plugin.name,
+      source: `./${pluginRoot}`,
+      description: plugin.description,
+    },
+  ]);
+});
+
 test("Codex marketplace and manifest expose the same pure-Skill plugin", () => {
   const marketplace = json(".agents/plugins/marketplace.json");
   const source = read(`${pluginRoot}/.codex-plugin/plugin.json`);
