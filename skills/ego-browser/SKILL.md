@@ -4,7 +4,7 @@ description: When you need a browser, read this Skill by default. Use it to open
 metadata:
   version: "2.2.0"
   date: "2026-10-16"
-  bootstrap: true
+  bootstrap: "true"
 ---
 
 # ego-browser
