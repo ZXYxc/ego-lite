@@ -1255,12 +1255,25 @@ class TaskSpace {
       const keptManagedLabels = Object.keys(ledger.pages).filter(
         (label) => !closedManagedLabelSet.has(label),
       );
+      // Unmanaged tabs the SDK opened itself (the blank anchor page.close()
+      // leaves behind) belong to the agent: they are closed, not protected.
+      const agentUnmanagedTargets = tabs
+        .filter(
+          (tab) =>
+            !managedByTarget.has(tab.targetId) &&
+            ledger.unmanagedTargets[tab.targetId] === "agent",
+        )
+        .map((tab) => tab.targetId);
+      const agentUnmanagedSet = new Set(agentUnmanagedTargets);
       const preservedUnmanagedCount = tabs.filter(
-        (tab) => !managedByTarget.has(tab.targetId),
+        (tab) =>
+          !managedByTarget.has(tab.targetId) &&
+          !agentUnmanagedSet.has(tab.targetId),
       ).length;
       const hasProtectedTabs = tabs.some((tab) => {
         const managed = managedByTarget.get(tab.targetId);
-        return !managed || managed.openedBy === "unknown";
+        if (managed) return managed.openedBy === "unknown";
+        return !agentUnmanagedSet.has(tab.targetId);
       });
 
       if (
@@ -1282,6 +1295,7 @@ class TaskSpace {
       for (const label of labelsToClose) {
         await this.page(label).close();
       }
+      await this.#closeAgentUnmanagedTabs(agentUnmanagedTargets);
       await this.#services.completeTaskSpace();
       await this.#discardTerminalState();
       return {
@@ -1292,6 +1306,42 @@ class TaskSpace {
         preservedUnmanagedCount,
       };
     });
+  }
+
+  /**
+   * Close SDK-opened unmanaged tabs (blank anchors) that the space no longer
+   * needs. A tab that is the last one in the space stays: closing it would
+   * destroy the space the caller chose to keep.
+   */
+  async #closeAgentUnmanagedTabs(targetIds: string[]): Promise<void> {
+    if (targetIds.length === 0) return;
+    let live = new Set(
+      (await this.#services.listTabs()).map((tab) => tab.targetId),
+    );
+    for (const targetId of targetIds) {
+      if (!live.has(targetId) || live.size <= 1) continue;
+      const result = await this.#services.cdp("Target.closeTarget", {
+        targetId,
+      });
+      if (result?.success !== true) {
+        throw new Error(`failed to close anchor tab ${targetId}`);
+      }
+      const disappeared = await waitForTargetToDisappear(
+        this.#services,
+        targetId,
+        PAGE_CLOSE_CONFIRM_TIMEOUT_MS,
+      );
+      if (!disappeared) {
+        throw new Error(
+          `anchor tab ${targetId} did not close within ${PAGE_CLOSE_CONFIRM_TIMEOUT_MS}ms`,
+        );
+      }
+      this.#services.invalidateSession(targetId);
+      this.#services.pageRefs.clear(targetId);
+      live = new Set(
+        (await this.#services.listTabs()).map((tab) => tab.targetId),
+      );
+    }
   }
 
   async [rollbackCreatedTaskSpaceToken](): Promise<void> {
@@ -2682,12 +2732,16 @@ class Page {
         throw new Error(`page ${this.label} was closed`);
       }
       if (tabs.length <= 1) {
+        // Ego Lite destroys a task space when its last tab closes, so open a
+        // blank anchor first. It is SDK-owned: recording it as an agent-origin
+        // unmanaged tab keeps reconcile from adopting it as a managed Page and
+        // lets finish() close it instead of protecting it as a user tab.
         const anchorTargetId = await this.#services.createTab("about:blank");
         try {
           await this.#services.ledger.keepUnmanaged(
             this.spaceId,
             anchorTargetId,
-            "unknown",
+            "agent",
           );
         } catch (error) {
           // The original page is still live, so a failed anchor bookkeeping

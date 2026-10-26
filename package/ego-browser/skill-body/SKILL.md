@@ -562,9 +562,10 @@ await task.finish({ keep: [] }); // Default: keep no Agent-managed Pages.
 await task.finish({ keep: ["p2"] }); // Exception: keep only the result Page for the user.
 ```
 
-User-created and unmanaged tabs are protected; if any remain, `keep: []` does
-not close the whole space. Do not close unwanted Pages one by one at completion;
-list the Pages to keep instead.
+User-created and unknown-origin tabs are protected; if any remain, `keep: []`
+does not close the whole space. The blank tab that `page.close()` leaves when it
+closes the last Page is SDK-owned and never blocks closing. Do not close
+unwanted Pages one by one at completion; list the Pages to keep instead.
 Use `page.close()` only while the task is still in progress. Do not call
 `finish()` when the task stops for user control or an error.
 

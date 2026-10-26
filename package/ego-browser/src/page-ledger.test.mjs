@@ -719,13 +719,13 @@ test("an explicitly unmanaged anchor is not adopted during reconciliation", asyn
   await withTempLedger(async (rootDir) => {
     const store = new PageLedgerStore({ rootDir });
     await store.reconcile(10, [], { autoAdoptNew: true });
-    await store.keepUnmanaged(10, "target-anchor", "unknown");
+    await store.keepUnmanaged(10, "target-anchor", "agent");
 
     const reconciled = await store.reconcile(10, ["target-anchor"], {
       autoAdoptNew: true,
     });
 
     assert.deepEqual(reconciled.pages, {});
-    assert.equal(reconciled.unmanagedTargets["target-anchor"], "unknown");
+    assert.equal(reconciled.unmanagedTargets["target-anchor"], "agent");
   });
 });
