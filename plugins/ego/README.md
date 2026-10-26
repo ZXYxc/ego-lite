@@ -326,14 +326,18 @@ EOF
 
 `skills/ego-browser` here is a copy of the canonical `skills/ego-browser` at the
 repository root, the thin entry Skill. The usage guide it points to lives in
-`package/ego-browser/skill-body/SKILL.md` and ships with ego lite. Edit the
-canonical Skill, then refresh the copy:
+`package/ego-browser/skill-body/SKILL.md` and ships with ego lite. Edit only
+the canonical Skill. When a commit stages changes under `skills/ego-browser/`,
+the commit hook refreshes the copy from the staged Skill and stages it too, so
+unstaged edits and untracked drafts never reach the copy. Without the hook,
+refresh the copy yourself:
 
 ```bash
 npm --prefix plugins/ego run sync-skills
 ```
 
-The plugin tests fail while the copy differs from the canonical Skill. The
+The plugin tests compare the copy with the canonical Skill in the Git index and
+fail while they differ, so CI catches a commit that skipped the hook. The
 packager builds every artifact from the canonical Skill, and unexpected or
 broken links fail packaging.
 

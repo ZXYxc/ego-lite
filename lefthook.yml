@@ -38,6 +38,12 @@ pre-commit:
       run: |
         git diff --cached --name-only --diff-filter=ACMR | grep -Eq '^(package/ego-browser/(src/learning/|scripts/validate-site-skills\.ts)|skills/ego-browser/learnings/)' || exit 0
         cd package/ego-browser && npm run validate:site-skills
+    plugin-skill-sync:
+      # Lefthook runs commands in name order, so this refreshes the plugin's
+      # copy of the entry Skill before plugin-tests checks it.
+      run: |
+        git diff --cached --name-only | grep -q '^skills/ego-browser/' || exit 0
+        node plugins/scripts/sync-skills.mjs ego --staged
     plugin-tests:
       run: |
         git diff --cached --name-only --diff-filter=ACMR | grep -Eq '^(plugins/|skills/ego-browser/|package/ego-browser/skill-body/|\.agents/plugins/|\.claude-plugin/|\.cursor-plugin/)' || exit 0

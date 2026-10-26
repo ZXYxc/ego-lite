@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
-import { basename } from "node:path";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 const repoFile = (path) => new URL(`../../../${path}`, import.meta.url);
@@ -173,27 +173,26 @@ test("versioned guide restores v2 Pages across script rounds", () => {
 test("source plugin carries an exact copy of the canonical Skill", () => {
   const canonicalRoot = "skills/ego-browser";
   const copyRoot = `${claudePluginRoot}/skills/ego-browser`;
-  const sync = "run `npm --prefix plugins/ego run sync-skills`";
   // Hosts that install the plugin straight from Git drop links that leave
-  // the plugin root, so the copy must be real files.
-  assert.equal(lstatSync(repoFile(copyRoot)).isSymbolicLink(), false);
-  const files = (root) =>
-    readdirSync(repoFile(root), { recursive: true })
-      .filter(
-        (path) =>
-          basename(path) !== ".DS_Store" &&
-          lstatSync(repoFile(`${root}/${path}`)).isFile(),
-      )
-      .sort();
-  const canonicalFiles = files(canonicalRoot);
-  assert.deepEqual(files(copyRoot), canonicalFiles, `${copyRoot}: ${sync}`);
-  for (const path of canonicalFiles) {
-    assert.deepEqual(
-      readFileSync(repoFile(`${copyRoot}/${path}`)),
-      readFileSync(repoFile(`${canonicalRoot}/${path}`)),
-      `${copyRoot}/${path} differs from the canonical Skill: ${sync}`,
-    );
-  }
+  // the plugin root, so the copy must be real files. Compare the Git index,
+  // which is what a commit ships, so untracked drafts do not count.
+  const entries = (root) =>
+    execFileSync("git", ["ls-files", "--stage", "--", root], {
+      cwd: repoFile(""),
+      encoding: "utf8",
+    })
+      .trim()
+      .split("\n")
+      .map((line) => {
+        const [meta, path] = line.split("\t");
+        const [mode, blob] = meta.split(" ");
+        return `${mode} ${blob} ${path.slice(root.length + 1)}`;
+      });
+  assert.deepEqual(
+    entries(copyRoot),
+    entries(canonicalRoot),
+    `${copyRoot} differs from the canonical Skill: run \`npm --prefix plugins/ego run sync-skills\``,
+  );
 });
 
 test("versioned guide preserves TaskSpace safety policy", () => {
