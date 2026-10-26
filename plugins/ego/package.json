@@ -19,7 +19,6 @@
     ".codex-plugin",
     ".cursor-plugin",
     ".codebuddy-plugin",
-    ".workbuddy-plugin",
     ".qoder-plugin",
     "index.js",
     "cordis.patch.yml",
@@ -34,8 +33,6 @@
   },
   "keywords": [
     "agent-plugin",
-    "deepseek-harness",
-    "opencode",
     "browser",
     "automation",
     "skill"
@@ -43,6 +40,7 @@
   "author": "citrolabs",
   "license": "MIT",
   "homepage": "https://github.com/citrolabs/ego-lite",
+  "repository": "https://github.com/citrolabs/ego-lite",
   "publishConfig": {
     "access": "public"
   }

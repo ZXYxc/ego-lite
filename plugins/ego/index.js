@@ -1,21 +1,15 @@
 import { fileURLToPath } from "node:url";
 
-const skillPath = fileURLToPath(
-  new URL("./skills/ego-browser/SKILL.md", import.meta.url),
-);
+const skillsPath = fileURLToPath(new URL("./skills", import.meta.url));
 
 export const EgoBrowserPlugin = async () => ({
   config: async (config) => {
-    config.instructions ??= [];
-    if (!config.instructions.includes(skillPath)) {
-      config.instructions.push(skillPath);
+    // OpenCode hands plugins its normalized config, which keeps extra Skill
+    // folders in skills.paths. Each discovered Skill also becomes a command.
+    config.skills ??= {};
+    config.skills.paths ??= [];
+    if (!config.skills.paths.includes(skillsPath)) {
+      config.skills.paths.push(skillsPath);
     }
-
-    config.command ??= {};
-    config.command["ego-browser"] ??= {
-      description: "Automate the browser with ego-browser",
-      template:
-        "Follow the installed ego-browser Skill for this request: $ARGUMENTS",
-    };
   },
 });

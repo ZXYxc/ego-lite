@@ -54,7 +54,6 @@ test("branded hosts expose explicit pure-Skill manifests", () => {
   for (const [host, path, skills] of [
     ["Cursor", ".cursor-plugin/plugin.json", "./skills/"],
     ["CodeBuddy", ".codebuddy-plugin/plugin.json", ["./skills/ego-browser"]],
-    ["WorkBuddy", ".workbuddy-plugin/plugin.json", ["./skills/ego-browser"]],
     ["QoderWork", ".qoder-plugin/plugin.json", ["./skills/ego-browser"]],
   ]) {
     const source = read(`${pluginRoot}/${path}`);
@@ -82,19 +81,12 @@ test("branded hosts expose explicit pure-Skill manifests", () => {
     assertPureSkillText(source, `${host} manifest`);
   }
 
-  assert.deepEqual(
-    json(`${pluginRoot}/.codebuddy-plugin/plugin.json`),
-    json(`${pluginRoot}/.workbuddy-plugin/plugin.json`),
-    "WorkBuddy's authoritative and branded manifests must not drift",
-  );
-
   for (const path of [
     "plugin.json",
     ".claude-plugin",
     ".codex-plugin",
     ".cursor-plugin",
     ".codebuddy-plugin",
-    ".workbuddy-plugin",
     ".qoder-plugin",
   ]) {
     assert.ok(pkg.files.includes(path), `${path} must ship in the npm package`);
@@ -239,7 +231,7 @@ test("Codex listing metadata satisfies the plugin directory", () => {
   }
 });
 
-test("OpenCode adapter injects only instructions and the Skill slash command", async () => {
+test("OpenCode adapter registers only the packaged Skill path", async () => {
   const pkgSource = read(`${pluginRoot}/package.json`);
   const pkg = JSON.parse(pkgSource);
   assert.equal(pkg.name, "@citrolabs/ego");
@@ -258,19 +250,46 @@ test("OpenCode adapter injects only instructions and the Skill slash command", a
   const hooks = await EgoBrowserPlugin({});
   const config = {};
   await hooks.config(config);
+  await hooks.config(config);
 
   assert.equal(config.mcp, undefined);
-  assert.equal(config.instructions.length, 1);
-  assert.match(
-    config.instructions[0],
-    /plugins\/ego\/skills\/ego-browser\/SKILL\.md$/,
+  assert.equal(config.instructions, undefined);
+  assert.equal(
+    config.command,
+    undefined,
+    "OpenCode derives /ego-browser from the Skill",
   );
-  assert.match(config.command["ego-browser"].template, /\$ARGUMENTS/);
+  // OpenCode reads only skills.paths from the normalized config, even when
+  // the user's file lists Skill folders as a plain array.
+  assert.equal(
+    config.skills.paths.length,
+    1,
+    "repeated hooks add the path once",
+  );
+  assert.match(config.skills.paths[0], /plugins\/ego\/skills$/);
+
+  const user = { skills: { paths: ["/user/skills"], urls: [] } };
+  await hooks.config(user);
+  assert.deepEqual(user.skills, {
+    paths: ["/user/skills", config.skills.paths[0]],
+    urls: [],
+  });
   assertPureSkillText(adapterSource, "OpenCode adapter");
-  assertPureSkillText(
-    config.command["ego-browser"].template,
-    "OpenCode slash command",
-  );
+});
+
+test("every host that shows a plugin logo uses the Skill logo", () => {
+  const logo = "skills/ego-browser/assets/logo.png";
+  for (const [label, value] of [
+    [
+      "Codex interface.logo",
+      json(`${pluginRoot}/.codex-plugin/plugin.json`).interface.logo,
+    ],
+    ["Claude icon", json(`${pluginRoot}/.claude-plugin/plugin.json`).icon],
+    ["Cursor logo", json(`${pluginRoot}/.cursor-plugin/plugin.json`).logo],
+  ]) {
+    assert.equal(value.replace(/^\.\//, ""), logo, `${label} must be ${logo}`);
+  }
+  assert.equal(existsSync(repoFile(`${pluginRoot}/${logo}`)), true);
 });
 
 test("portable Skill is the standalone entry Skill without runtime tools", () => {
@@ -346,21 +365,22 @@ test("plugin README documents every host as a pure-Skill install", () => {
     "QwenWork Desktop",
     "OpenCode",
     "DeepSeek Harness",
+    "Pi",
   ]) {
     assert.match(readme, new RegExp(`### ${host}\\b`));
   }
 
   assert.match(readme, /claude --plugin-dir/);
   assert.match(readme, /codex plugin add ego@ego-codex-local/);
-  assert.match(readme, /cursor-agent[\s\\]*--plugin-dir/);
+  assert.match(readme, /agent --plugin-dir/);
   assert.match(readme, /\.cursor-plugin\/plugin\.json/);
   assert.match(readme, /copilot --plugin-dir/);
-  assert.match(readme, /grok plugin install \/absolute\/path/);
+  assert.match(readme, /grok plugin install \/absolute\/path\S* --trust/);
   assert.match(readme, /\.codebuddy-plugin\/plugin\.json/);
-  assert.match(readme, /\.workbuddy-plugin\/plugin\.json/);
   assert.match(readme, /\.qoder-plugin\/plugin\.json/);
-  assert.match(readme, /opencode plugin "file:/);
+  assert.match(readme, /opencode plugin \/absolute\/path/);
   assert.match(readme, /dsh plugin --profile web add \/absolute\/path/);
+  assert.match(readme, /pi install npm:@citrolabs\/ego-pi/);
   assert.match(
     readme,
     new RegExp(

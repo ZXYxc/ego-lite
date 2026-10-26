@@ -1,6 +1,6 @@
 # ego agent plugin
 
-Package the same `ego-browser` Skill for nine agent hosts. Each distribution
+Package the same `ego-browser` Skill for ten agent hosts. Each distribution
 contains only its host entry points, a complete copy of the canonical Skill,
 and installation instructions for that host.
 
@@ -12,7 +12,7 @@ and installation instructions for that host.
 
 ## Packaging
 
-From the repository root, build all nine artifacts with one command:
+From the repository root, build all ten artifacts with one command:
 
 ```bash
 npm --prefix plugins/ego run package
@@ -20,28 +20,35 @@ npm --prefix plugins/ego run package
 
 The output directory is `dist/plugins/ego-v2.2.0/`:
 
-| Host             | Artifact                          | Contents                                            |
-| ---------------- | --------------------------------- | --------------------------------------------------- |
-| Claude Code      | `ego-claude-code-v2.2.0.zip`      | Claude plugin                                       |
-| Codex            | `ego-codex-v2.2.0.zip`            | Codex plugin at the archive root, plus marketplace  |
-| Cursor           | `ego-cursor-v2.2.0.zip`           | Cursor plugin                                       |
-| GitHub Copilot   | `ego-github-copilot-v2.2.0.zip`   | Claude-compatible plugin                            |
-| Grok Build       | `ego-grok-build-v2.2.0.zip`       | Agent Plugins manifest and Skill                    |
-| WorkBuddy        | `ego-workbuddy-v2.2.0.zip`        | Local marketplace and WorkBuddy/CodeBuddy manifests |
-| QwenWork Desktop | `ego-qwenwork-v2.2.0.zip`         | Claude-compatible expert kit                        |
-| OpenCode         | `ego-opencode-v2.2.0.tgz`         | `@citrolabs/ego-opencode` npm package               |
-| DeepSeek Harness | `ego-deepseek-harness-v2.2.0.tgz` | `@citrolabs/ego-deepseek-harness` npm bundle        |
+| Host             | Artifact                          | Contents                                           |
+| ---------------- | --------------------------------- | -------------------------------------------------- |
+| Claude Code      | `ego-claude-code-v2.2.0.zip`      | Claude plugin                                      |
+| Codex            | `ego-codex-v2.2.0.zip`            | Codex plugin at the archive root, plus marketplace |
+| Cursor           | `ego-cursor-v2.2.0.zip`           | Cursor plugin                                      |
+| GitHub Copilot   | `ego-github-copilot-v2.2.0.zip`   | Agent Plugins plugin, plus marketplace             |
+| Grok Build       | `ego-grok-build-v2.2.0.zip`       | Agent Plugins and Claude-compatible manifests      |
+| WorkBuddy        | `ego-workbuddy-v2.2.0.zip`        | Local marketplace and CodeBuddy manifest           |
+| QwenWork Desktop | `ego-qwenwork-v2.2.0.zip`         | Claude-compatible expert kit                       |
+| OpenCode         | `ego-opencode-v2.2.0.tgz`         | `@citrolabs/ego-opencode` npm package              |
+| DeepSeek Harness | `ego-deepseek-harness-v2.2.0.tgz` | `@citrolabs/ego-deepseek-harness` npm bundle       |
+| Pi               | `ego-pi-v2.2.0.tgz`               | `@citrolabs/ego-pi` Pi package                     |
 
 Every ZIP includes a host-specific `README.md` at its root; npm archives include
 it under `package/`. The WorkBuddy ZIP contains a marketplace root with the
 plugin under `plugins/ego/`. Other ZIPs start directly at the plugin root. The
 Codex ZIP starts there too and carries its marketplace file alongside, because
 the public plugin directory rejects an archive whose manifest is not at the
-root.
+root. The GitHub Copilot ZIP carries its marketplace file the same way, because
+Copilot CLI deprecates installing a plugin directly from a local path.
 
-The two npm packages have separate names and exports so their adapters cannot
-be confused by package caches. All nine packages contain real Skill files;
+The three npm packages have separate names and exports so their adapters cannot
+be confused by package caches. All ten packages contain real Skill files;
 none depends on the source checkout or its symlink.
+
+Every host that reads a plugin logo uses the Skill's
+`assets/logo.png`: Codex `interface.logo`, Claude Code `icon`, Cursor `logo`,
+and the Pi gallery `pi.image`. The Codex composer icon is the same mark at
+256 px.
 
 Override the output parent directory, or package all plugin directories:
 
@@ -51,7 +58,7 @@ node plugins/scripts/package-plugins.mjs --all
 ```
 
 Each plugin gets its own `<name>-v<version>/` directory. Rebuilding replaces the
-nine named artifacts only after all nine have been built. A build failure leaves
+ten named artifacts only after all ten have been built. A build failure leaves
 previous artifacts intact. Older universal ZIP/npm outputs outside the version
 directory are left untouched and are no longer generated.
 
@@ -75,8 +82,13 @@ claude --plugin-dir /absolute/path/to/ego-claude-code
 ```
 
 Use `/ego:ego-browser`. This flag loads the plugin for that session. Persistent
-installation uses a plugin marketplace; the repository marketplace exposes
-`ego@ego-agent-skills` when that source version is available.
+installation uses a plugin marketplace. The repository marketplace exposes
+`ego@ego-agent-skills` at the version on its default branch:
+
+```bash
+claude plugin marketplace add citrolabs/ego-lite
+claude plugin install ego@ego-agent-skills
+```
 
 See the [Claude Code plugin reference](https://code.claude.com/docs/en/plugins-reference).
 
@@ -111,61 +123,80 @@ See the [OpenAI plugin guide](https://developers.openai.com/plugins/build/plugin
 
 ### Cursor
 
-Extract the Cursor ZIP and load it with Cursor CLI:
+Extract the Cursor ZIP and load it for a Cursor CLI session:
 
 ```bash
-cursor-agent --plugin-dir /absolute/path/to/ego-cursor
+agent --plugin-dir /absolute/path/to/ego-cursor
 ```
 
-The package declares its Skill through `.cursor-plugin/plugin.json`. Use
-`/ego-browser` in the session. This command does not install a Cursor Desktop
-marketplace entry.
+`cursor-agent` is the legacy name of the `agent` command. To load the plugin in
+Cursor Desktop, extract the ZIP to `~/.cursor/plugins/local/ego`, then run
+**Developer: Reload Window**.
+
+The package declares its Skill, logo, category, and tags through
+`.cursor-plugin/plugin.json`. Use `/ego-browser` in the session. The Cursor
+Marketplace takes submissions as public Git repositories, not ZIP uploads.
+
+See the [Cursor plugin guide](https://cursor.com/docs/plugins).
 
 ### GitHub Copilot
 
-Extract the GitHub Copilot ZIP and load it with Copilot CLI:
+Extract the GitHub Copilot ZIP into a persistent directory. Copilot reads its
+root `plugin.json`, an Agent Plugins 1.0 manifest, and
+`.github/plugin/marketplace.json` lists the plugin at the archive root. Install
+it with Copilot CLI:
 
 ```bash
-copilot --plugin-dir /absolute/path/to/ego-github-copilot
+copilot plugin marketplace add /absolute/path/to/ego-github-copilot
+copilot plugin install ego@ego-github-copilot-local
 ```
 
-Use `/ego-browser`. This local session uses the packaged Claude-compatible
-manifest. VS Code marketplace installation is a separate host workflow.
+To load it for one session instead, run
+`copilot --plugin-dir /absolute/path/to/ego-github-copilot`. Use `/ego-browser`,
+and confirm that `copilot skill list` shows `ego-browser` under **Plugin
+skills**. Copilot CLI deprecates `copilot plugin install` from a local path, so
+use the marketplace route for a persistent install.
 
-Check the Skill's source when a personal `ego-browser` Skill is already
-installed. In the tested Copilot CLI, the personal copy takes precedence over
-the plugin copy, and a disabled personal copy prevents the plugin Skill from
-being invoked. Resolve that duplicate and enable the plugin Skill before use.
+Personal and project Skills take precedence over plugin Skills with the same
+name. When a personal `ego-browser` Skill is installed, `copilot skill list`
+shows it under **Personal skills** and hides the plugin copy. Remove that
+duplicate before use.
 
 See the [GitHub Copilot plugin guide](https://docs.github.com/en/copilot/concepts/agents/about-plugins).
 
 ### Grok Build
 
-Extract the Grok Build ZIP, then install the local directory:
+Extract the Grok Build ZIP, check it, then install the local directory:
 
 ```bash
-grok plugin install /absolute/path/to/ego-grok-build
+grok plugin validate /absolute/path/to/ego-grok-build
+grok plugin install /absolute/path/to/ego-grok-build --trust
 ```
 
-Use `/ego-browser`. The package contains the Agent Plugins `plugin.json` and
-Skill directory. Remove it with `grok plugin uninstall ego`.
+Without `--trust`, `grok plugin install` exits and tells you to re-run it with
+`--trust`. Use `/ego-browser`. Remove it with `grok plugin uninstall ego`.
+
+Grok Build reads the Agent Plugins `plugin.json` first. The package also
+carries `.claude-plugin/plugin.json`, because the Grok plugin marketplace
+catalog reads only branded manifests.
 
 ### WorkBuddy
 
-Extract the WorkBuddy ZIP as a marketplace root. It contains
-`.claude-plugin/marketplace.json` and `plugins/ego/`, including
-`.codebuddy-plugin/plugin.json`, `.workbuddy-plugin/plugin.json`, and the
-Claude-compatible manifest.
+The WorkBuddy ZIP is a marketplace root. It contains
+`.codebuddy-plugin/marketplace.json` and `plugins/ego/` with
+`.codebuddy-plugin/plugin.json`, the manifest WorkBuddy reads first.
 
-For WorkBuddy versions that expose **添加市场** with local sources, add the
-absolute path of the extracted root, select **ego-workbuddy-local**, and install
-**ego**. Start a new task and ask it to use the ego-browser Skill.
+Extract the ZIP into a persistent directory. In **添加市场**, enter the absolute
+path of the extracted root, select **ego-workbuddy-local**, install **ego**,
+then start a new task and ask it to use the ego-browser Skill. A directory
+marketplace runs the plugin from that directory, so keep it in place. The
+bundled CodeBuddy CLI also accepts the ZIP path itself as a marketplace and
+copies the plugin into its cache.
 
-Local marketplace import still needs verification in WorkBuddy Desktop. The
-[official WorkBuddy plugin guide](https://www.codebuddy.cn/docs/workbuddy/From-Beginner-to-Expert-Guide/Function-Description/Plug-In)
-documents marketplace installation but does not establish a direct ZIP import
-workflow. If the installed version only accepts a published marketplace, this
-local archive must be distributed through that supported marketplace first.
+The repository is a marketplace too: add `citrolabs/ego-lite` and install
+`ego@ego-agent-skills`, which tracks the version on its default branch.
+
+See the [CodeBuddy plugin marketplace guide](https://www.codebuddy.cn/docs/cli/plugin-marketplaces).
 
 ### QwenWork Desktop
 
@@ -173,44 +204,47 @@ Upload the QwenWork ZIP directly through **扩展 → 专家套件 → + 添加 
 then click **安装**. Start a new task and ask it to use ego-browser.
 
 This package uses `.claude-plugin/plugin.json`, an explicitly supported expert
-kit format. The older `.qoder-plugin/plugin.json` source manifest is not used
-for this artifact. See the [QwenWork expert-kit guide](https://qwenwork.cn/docs/desktop/expert-kits).
+kit format. QwenWork was formed from QoderWork, MuleRun, and Wukong; the
+source `.qoder-plugin/plugin.json` manifest from QoderWork is not used for this
+artifact. See the [QwenWork expert-kit guide](https://qwenwork.cn/docs/desktop/expert-kits).
 
 ### OpenCode
 
-Extract the local npm archive into a persistent directory, then register its
-JavaScript entry point:
+Extract the local npm archive into a persistent directory, then register the
+extracted package directory:
 
 ```bash
 mkdir -p /absolute/path/to/ego-opencode
 tar -xzf /absolute/path/to/ego-opencode-v2.2.0.tgz -C /absolute/path/to/ego-opencode
-opencode plugin "file:///absolute/path/to/ego-opencode/package/index.js" -g
+opencode plugin /absolute/path/to/ego-opencode/package -g
 ```
 
-Keep the extracted directory in place. OpenCode 1.14.30 accepts a local `.tgz`
-in its installer but fails to resolve that archive's server entry at startup;
-the extracted file URL loads successfully. Remove any earlier `.tgz` entry
-from the config's `plugin` array when switching to the file URL.
+Keep the extracted directory in place. OpenCode does not install the `.tgz`
+itself. Once the package is published, install it by name instead:
+`opencode plugin @citrolabs/ego-opencode -g`.
 
 The package is named `@citrolabs/ego-opencode`. Its `.` and `./server` exports
-load `index.js`, which adds the packaged Skill instructions and `/ego-browser`
-command. To remove it, delete its entry from the applicable `opencode.json`
-`plugin` array.
+load `index.js`, which adds the packaged `skills/` directory to OpenCode's
+Skill paths. OpenCode then lists ego-browser as a Skill and offers it as the
+`/ego-browser` command. To remove the plugin, delete its entry from the
+`plugin` array of the applicable `opencode.json` or `opencode.jsonc`.
 
 See the [OpenCode plugin guide](https://opencode.ai/docs/plugins/).
 
 ### DeepSeek Harness
 
-Extract the npm archive into a persistent directory, then add its `package/`
-directory to the desired profile:
+Add the npm archive to the desired profile:
 
 ```bash
-mkdir -p /absolute/path/to/ego-deepseek-harness
-tar -xzf /absolute/path/to/ego-deepseek-harness-v2.2.0.tgz -C /absolute/path/to/ego-deepseek-harness
-dsh plugin --profile web add /absolute/path/to/ego-deepseek-harness/package
+dsh plugin --profile web add /absolute/path/to/ego-deepseek-harness-v2.2.0.tgz
 dsh --profile web --dump-config
 dsh --profile web
 ```
+
+DSH copies the archive into the profile. Once the package is published, add it
+by name instead, `dsh plugin --profile web add @citrolabs/ego-deepseek-harness`;
+only a package added by name receives update notices. The bundle declares
+`engines.dsh` as `>=0.2.0 <0.3.0`, and DSH refuses it outside that range.
 
 The package is named `@citrolabs/ego-deepseek-harness`. Its bundle patch loads
 `@citrolabs/ego-deepseek-harness/dsh` and registers the packaged Skill. Use
@@ -219,17 +253,41 @@ The package is named `@citrolabs/ego-deepseek-harness`. Its bundle patch loads
 
 An existing personal `ego-browser` Skill takes precedence over this bundled
 provider. Check the base directory returned by the Skill tool: it must point
-inside this extracted package when validating the plugin. Resolve the duplicate
+inside the package installed in the profile when validating the plugin. Resolve the duplicate
 personal Skill if you want named invocation to use the plugin copy.
 
 See the [DeepSeek Harness local package guide](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/develop/basic/publish.md).
 
+### Pi
+
+Install the npm package, or the downloaded archive before it is published:
+
+```bash
+pi install npm:@citrolabs/ego-pi
+pi install "npm:@citrolabs/ego-pi@file:/absolute/path/to/ego-pi-v2.2.0.tgz"
+```
+
+Pass the archive through the `npm:` source: a bare `.tgz` path installs without
+loading any Skill. Use `/skill:ego-browser`. Remove it with
+`pi remove npm:@citrolabs/ego-pi`.
+
+The package declares the `pi-package` keyword, which makes a published package
+eligible for the [Pi package gallery](https://pi.dev/packages), and `pi.image`
+for its gallery preview. The ego-browser Skill that ego lite installs in
+`~/.agents/skills` takes precedence over this package copy, even when it is an
+older version: Pi reports the package copy as skipped under **Skill
+conflicts**. Both are the thin entry Skill, and the ego lite copy matches the
+installed app.
+
+See the [Pi packages guide](https://pi.dev/docs/latest/packages).
+
 ## Verification
 
-Packaging tests check all nine payloads, marketplace paths, canonical Skill
+Packaging tests check all ten payloads, marketplace paths, canonical Skill
 contents, source symlink preservation, repeat builds, and failed-batch handling.
-They load both npm adapters after extraction outside the repository. These
-checks do not establish end-to-end compatibility in all nine host applications.
+They load the OpenCode and DeepSeek Harness adapters after extraction outside
+the repository. These checks do not establish end-to-end compatibility in all
+ten host applications.
 
 After installation, confirm that the host discovers ego-browser and can run:
 
