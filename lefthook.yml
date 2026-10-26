@@ -52,3 +52,14 @@ pre-commit:
       run: |
         git diff --cached --name-only --diff-filter=ACMR | grep -Eq '^(package/ego-browser/|skills/ego-browser/)' || exit 0
         cd package/ego-browser && npm run e2e
+
+post-commit:
+  commands:
+    plugin-skill-index:
+      # `git commit <paths>` commits plugin-skill-sync's copy from a temporary
+      # index, so the real index keeps the old copy. Point it back at HEAD.
+      run: |
+        copy=plugins/ego/skills/ego-browser
+        if git diff --quiet HEAD -- "$copy" && ! git diff --cached --quiet -- "$copy"; then
+          git reset -q -- "$copy"
+        fi

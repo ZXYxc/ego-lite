@@ -22,10 +22,16 @@ function write(root, path, value) {
   writeFileSync(join(root, path), value);
 }
 
+// A commit hook runs these tests with GIT_INDEX_FILE pointing at the commit's
+// index, so the fixture repository must not inherit Git's environment.
+const env = Object.fromEntries(
+  Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+);
+
 test("--staged copies only what the commit stages and stages the copy", () => {
   const root = mkdtempSync(join(tmpdir(), "ego-skill-sync-"));
   const git = (...args) =>
-    execFileSync("git", args, { cwd: root, encoding: "utf8" });
+    execFileSync("git", args, { cwd: root, encoding: "utf8", env });
   try {
     mkdirSync(join(root, "plugins", "scripts"), { recursive: true });
     copyFileSync(script, join(root, "plugins", "scripts", "sync-skills.mjs"));
@@ -43,11 +49,11 @@ test("--staged copies only what the commit stages and stages the copy", () => {
     write(root, "skills/demo/SKILL.md", "v3 unstaged\n");
     write(root, "skills/demo/draft.md", "untracked\n");
 
-    execFileSync(process.execPath, [
-      join(root, "plugins", "scripts", "sync-skills.mjs"),
-      "p",
-      "--staged",
-    ]);
+    execFileSync(
+      process.execPath,
+      [join(root, "plugins", "scripts", "sync-skills.mjs"), "p", "--staged"],
+      { env },
+    );
 
     assert.equal(git("show", ":plugins/p/skills/demo/SKILL.md"), "v2 staged\n");
     assert.equal(
