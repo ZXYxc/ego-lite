@@ -6,5 +6,6 @@
     "name": "citrolabs",
     "email": "contact@citrolabs.ai"
   },
-  "homepage": "https://github.com/citrolabs/ego-lite"
+  "homepage": "https://github.com/citrolabs/ego-lite",
+  "icon": "./skills/ego-browser/assets/logo.png"
 }

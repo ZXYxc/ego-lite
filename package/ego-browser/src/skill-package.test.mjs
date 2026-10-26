@@ -192,7 +192,7 @@ test("the entry Skill defers usage to ego-browser skill", async () => {
     join(repoRoot, "skills/ego-browser/SKILL.md"),
     "utf8",
   );
-  assert.match(entry, /^\s+bootstrap: true$/m);
+  assert.match(entry, /^\s+bootstrap: "true"$/m);
   assert.match(entry, /^ego-browser skill$/m);
   assert.match(entry, /\[ego-browser:skill\] end of guide/);
   assert.match(entry, /references\/install\.md/);
