@@ -195,6 +195,35 @@ test("Codex listing metadata satisfies the plugin directory", () => {
     manifest.author.name,
     "author.name and interface.developerName must match, or the portal asks to confirm a default",
   );
+  // The portal blocks a skills-only upload without these, although the
+  // published docs only require them for MCP review.
+  for (const field of [
+    "websiteURL",
+    "supportURL",
+    "privacyPolicyURL",
+    "termsOfServiceURL",
+  ]) {
+    const value = listing[field];
+    assert.ok(value, `interface.${field} is required by the plugin directory`);
+    const url = new URL(value);
+    assert.equal(url.protocol, "https:", `interface.${field} must use HTTPS`);
+    assert.equal(
+      url.username + url.password,
+      "",
+      `interface.${field} must not embed credentials`,
+    );
+    assert.ok(
+      value.length <= 1024,
+      `interface.${field} must be 1024 characters or fewer, but is ${value.length}`,
+    );
+  }
+  // OpenAI ignores the whole .codex-plugin overlay once the root manifest
+  // declares extensions.com.openai; the two are not merged.
+  assert.equal(
+    json(`${pluginRoot}/plugin.json`).extensions?.["com.openai"],
+    undefined,
+    "root plugin.json must not declare extensions.com.openai, or the portal drops this listing",
+  );
   for (const field of ["composerIcon", "logo"]) {
     const asset = listing[field];
     assert.match(

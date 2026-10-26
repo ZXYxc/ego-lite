@@ -99,7 +99,11 @@ Remove the installed plugin with `codex plugin remove ego@ego-codex-local`.
 To publish, upload the same ZIP as a skills-only plugin in the submission
 portal and select the verified developer identity that matches `author.name`.
 The listing copy comes from the manifest's `interface` object, whose `category`
-must be one of the values the portal accepts. See
+must be one of the values the portal accepts. The portal also blocks the
+upload until `interface` declares `websiteURL`, `supportURL`,
+`privacyPolicyURL`, and `termsOfServiceURL`. Keep `extensions.com.openai` out
+of the root `plugin.json`: once it is present, OpenAI ignores the whole
+`.codex-plugin/plugin.json` listing instead of merging the two. See
 [Submit plugins](https://developers.openai.com/plugins/deploy/submission) and
 the [submission error reference](https://developers.openai.com/plugins/deploy/submission-errors).
 
