@@ -235,8 +235,12 @@ artifact. See the [QwenWork expert-kit guide](https://qwenwork.cn/docs/desktop/e
 
 ### OpenCode
 
-Extract the local npm archive into a persistent directory, then register the
-extracted package directory:
+The package works with OpenCode 1 and OpenCode 2, which ships as
+`@opencode/cli`. Run `opencode --version` to see which one is installed; the
+two install plugins differently.
+
+On OpenCode 1, extract the local npm archive into a persistent directory, then
+register the extracted package directory:
 
 ```bash
 mkdir -p /absolute/path/to/ego-opencode
@@ -246,15 +250,31 @@ opencode plugin /absolute/path/to/ego-opencode/package -g
 
 Keep the extracted directory in place. OpenCode does not install the `.tgz`
 itself. Once the package is published, install it by name instead:
-`opencode plugin @citrolabs/ego-opencode -g`.
+`opencode plugin @citrolabs/ego-opencode -g`. To remove the plugin, delete its
+entry from the `plugin` array of the applicable `opencode.json` or
+`opencode.jsonc`.
+
+On OpenCode 2, `opencode plugin add` accepts only npm and Git packages. Once the
+package is published, install it with:
+
+```bash
+opencode plugin add @citrolabs/ego-opencode
+```
+
+Remove it with `opencode plugin remove @citrolabs/ego-opencode`. To try the
+local archive first, extract it as above, then add the absolute path of the
+extracted `package` directory to the `plugins` array of `opencode.json` in the
+folder that `opencode debug paths config` prints.
 
 The package is named `@citrolabs/ego-opencode`. Its `.` and `./server` exports
-load `index.js`, which adds the packaged `skills/` directory to OpenCode's
-Skill paths. OpenCode then lists ego-browser as a Skill and offers it as the
-`/ego-browser` command. To remove the plugin, delete its entry from the
-`plugin` array of the applicable `opencode.json` or `opencode.jsonc`.
+load `index.js`, whose default export serves both versions. OpenCode 1 calls
+`server()`, which adds the packaged `skills/` directory to its Skill paths and
+offers ego-browser as the `/ego-browser` command. OpenCode 2 calls `setup()`,
+which adds the packaged ego-browser Skill unless the user already has one, such
+as the copy ego lite installs in `~/.agents/skills`.
 
-See the [OpenCode plugin guide](https://opencode.ai/docs/plugins/).
+See the plugin guides for [OpenCode 1](https://opencode.ai/docs/plugins/) and
+[OpenCode 2](https://opencode.ai/v2/docs/build/plugins/).
 
 ### DeepSeek Harness
 

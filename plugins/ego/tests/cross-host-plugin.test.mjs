@@ -246,7 +246,7 @@ test("Codex listing metadata satisfies the plugin directory", () => {
   }
 });
 
-test("OpenCode adapter registers only the packaged Skill path", async () => {
+test("OpenCode adapter registers only the packaged Skill", async () => {
   const pkgSource = read(`${pluginRoot}/package.json`);
   const pkg = JSON.parse(pkgSource);
   assert.equal(pkg.name, "@citrolabs/ego");
@@ -259,10 +259,17 @@ test("OpenCode adapter registers only the packaged Skill path", async () => {
   assertPureSkillText(pkgSource, "npm package metadata");
 
   const adapterSource = read(`${pluginRoot}/index.js`);
-  const { EgoBrowserPlugin } = await import(
+  const { default: plugin } = await import(
     new URL(`../../../${pluginRoot}/index.js`, import.meta.url)
   );
-  const hooks = await EgoBrowserPlugin({});
+  // OpenCode 1 reads id and server(), and rejects a default export that also
+  // has tui(). OpenCode 2 reads id and setup().
+  assert.equal(typeof plugin.id, "string");
+  assert.equal(typeof plugin.server, "function");
+  assert.equal(typeof plugin.setup, "function");
+  assert.equal(plugin.tui, undefined);
+
+  const hooks = await plugin.server({});
   const config = {};
   await hooks.config(config);
   await hooks.config(config);
@@ -289,6 +296,48 @@ test("OpenCode adapter registers only the packaged Skill path", async () => {
     paths: ["/user/skills", config.skills.paths[0]],
     urls: [],
   });
+
+  const skills = new Map();
+  const ctx = {
+    skill: {
+      transform: async (edit) =>
+        edit({
+          get: (id) => skills.get(id),
+          add: (skill) => skills.set(skill.id, skill),
+        }),
+    },
+  };
+  await plugin.setup(ctx);
+  const skill = skills.get("ego-browser");
+  const skillText = read(`${pluginRoot}/skills/ego-browser/SKILL.md`);
+  assert.deepEqual(Object.keys(skill), [
+    "id",
+    "name",
+    "description",
+    "path",
+    "content",
+  ]);
+  assert.equal(skill.name, "ego-browser");
+  assert.match(skill.path, /plugins\/ego\/skills\/ego-browser\/SKILL\.md$/);
+  // OpenCode 2 stores the Skill body without its front matter.
+  assert.equal(
+    skill.content,
+    skillText.slice(skillText.indexOf("\n---\n") + "\n---\n".length),
+  );
+  assert.ok(skillText.includes(`\ndescription: ${skill.description}\n`));
+  assert.doesNotMatch(
+    skill.description,
+    /^[>|"']/,
+    "the adapter reads a plain one-line description",
+  );
+
+  skills.set("ego-browser", { id: "ego-browser", path: "/user/SKILL.md" });
+  await plugin.setup(ctx);
+  assert.equal(
+    skills.get("ego-browser").path,
+    "/user/SKILL.md",
+    "a Skill the user already has keeps priority",
+  );
   assertPureSkillText(adapterSource, "OpenCode adapter");
 });
 
@@ -394,6 +443,7 @@ test("plugin README documents every host as a pure-Skill install", () => {
   assert.match(readme, /\.codebuddy-plugin\/plugin\.json/);
   assert.match(readme, /\.qoder-plugin\/plugin\.json/);
   assert.match(readme, /opencode plugin \/absolute\/path/);
+  assert.match(readme, /opencode plugin add @citrolabs\/ego-opencode/);
   assert.match(readme, /dsh plugin --profile web add \/absolute\/path/);
   assert.match(readme, /pi install npm:@citrolabs\/ego-pi/);
   assert.match(

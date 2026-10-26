@@ -354,10 +354,14 @@ function assertArtifacts(root, output, name, version, skillName) {
         import assert from 'node:assert/strict';
         import { existsSync } from 'node:fs';
         import { join } from 'node:path';
-        import { EgoBrowserPlugin } from '@citrolabs/ego-opencode/server';
+        import plugin from '@citrolabs/ego-opencode/server';
         const config = {};
-        await (await EgoBrowserPlugin()).config(config);
+        await (await plugin.server()).config(config);
         assert.ok(existsSync(join(config.skills.paths[0], 'ego-browser', 'SKILL.md')));
+        const added = [];
+        await plugin.setup({ skill: { transform: async (edit) => edit({ get() {}, add: (skill) => added.push(skill) }) } });
+        assert.equal(added.length, 1);
+        assert.ok(existsSync(added[0].path));
       `,
           ],
           { cwd: packages.get("opencode"), encoding: "utf8" },
