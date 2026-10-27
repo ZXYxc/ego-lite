@@ -113,7 +113,7 @@ export function preparePageDownload(
     const sessions = [...configuredSessions];
     configuredSessions.clear();
     if (!releaseSharedBehavior(token)) return;
-    await Promise.all(
+    const restored = await Promise.all(
       sessions.map((sessionId) =>
         services
           .cdp(
@@ -122,9 +122,29 @@ export function preparePageDownload(
             sessionId,
             1_000,
           )
-          .catch(() => {}),
+          .then(
+            () => sessionId,
+            () => undefined,
+          ),
       ),
     );
+    // Another process may have registered, and sent its setting, between the
+    // marker check and Chromium applying the reset; its setting then lost.
+    // The reset has been applied once its response is back, so a marker seen
+    // now belongs to a waiter whose later sends land after it, and one seen
+    // from before only needs the setting put back for it.
+    const session = restored.find((sessionId) => sessionId !== undefined);
+    if (!session || armedInterceptions.size > 0 || !hasOtherLiveWaiter()) {
+      return;
+    }
+    await services
+      .cdp(
+        "Page.setDownloadBehavior",
+        { behavior: "allowAndName", downloadPath: downloadDirectory() },
+        session,
+        1_000,
+      )
+      .catch(() => {});
   };
   const finish = async (result: DownloadCompletion) => {
     if (settled) return;

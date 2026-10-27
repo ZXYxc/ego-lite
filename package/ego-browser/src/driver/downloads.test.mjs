@@ -453,6 +453,40 @@ test("the default behavior waits for a live waiter in another process", async ()
   disposeDownloadArtifacts();
 });
 
+test("a process that registers while the reset is in flight gets the setting back", async () => {
+  const foreignMarker = waiterMarker(process.ppid);
+  const services = recordingServices();
+  services.cdp = async (method, params, sessionId) => {
+    services.calls.push({ method, params, sessionId });
+    if (
+      method === "Page.setDownloadBehavior" &&
+      params.behavior === "default"
+    ) {
+      // Another process arms between this process's marker check and the
+      // reset reaching Chromium.
+      await writeFile(foreignMarker, JSON.stringify({ pid: process.ppid }));
+    }
+    return {};
+  };
+  const interception = preparePageDownload(services, "target-late", {
+    timeoutMs: 1_000,
+  });
+  await interception.ready("session-late");
+  beginDownload(services, "target-late", "guid-late", "late.txt");
+  const download = await interception.event;
+  await writeFile(join(sharedDirectory, "guid-late"), "late");
+  completeDownload(services, "target-late", "guid-late");
+  await download.path();
+
+  assert.deepEqual(behaviorCalls(services.calls).slice(-2), [
+    { behavior: "default", sessionId: "session-late" },
+    { behavior: "allowAndName", sessionId: "session-late" },
+  ]);
+  await rm(foreignMarker, { force: true });
+  await download.delete();
+  disposeDownloadArtifacts();
+});
+
 test("a marker left by a dead process does not block the default behavior", async () => {
   const exited = spawnSync(process.execPath, ["-e", ""], { encoding: "utf8" });
   assert.equal(exited.status, 0);
