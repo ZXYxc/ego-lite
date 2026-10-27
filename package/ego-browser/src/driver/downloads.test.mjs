@@ -8,6 +8,7 @@ import {
   readFile,
   rename,
   rm,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
@@ -534,6 +535,33 @@ test("a marker left by a dead process does not block the default behavior", asyn
     sessionId: "session-stale",
   });
   await assert.rejects(access(staleMarker), "the stale marker is removed");
+  await download.delete();
+  disposeDownloadArtifacts();
+});
+
+test("a marker that stopped aging is stale even when its pid is alive", async () => {
+  // The runner's pid is alive, but a marker it has not refreshed for over an
+  // hour belongs to a dead process whose pid was reused.
+  const reusedMarker = waiterMarker(process.ppid);
+  await writeFile(reusedMarker, JSON.stringify({ pid: process.ppid }));
+  const old = new Date(Date.now() - 2 * 60 * 60 * 1_000);
+  await utimes(reusedMarker, old, old);
+  const services = recordingServices();
+  const interception = preparePageDownload(services, "target-reused", {
+    timeoutMs: 1_000,
+  });
+  await interception.ready("session-reused");
+  beginDownload(services, "target-reused", "guid-reused", "reused.txt");
+  const download = await interception.event;
+  await writeFile(join(sharedDirectory, "guid-reused"), "reused");
+  completeDownload(services, "target-reused", "guid-reused");
+  await download.path();
+
+  assert.deepEqual(behaviorCalls(services.calls).at(-1), {
+    behavior: "default",
+    sessionId: "session-reused",
+  });
+  await assert.rejects(access(reusedMarker));
   await download.delete();
   disposeDownloadArtifacts();
 });

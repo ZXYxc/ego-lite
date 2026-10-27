@@ -53,10 +53,12 @@ export type DownloadInterception = {
 // no process on this machine still waits for a download.
 const WAITERS_DIRECTORY = "waiters";
 const STALE_WAITER_MS = 60 * 60 * 1_000;
+const WAITER_REFRESH_MS = 10 * 60 * 1_000;
 const STALE_FILE_MS = 24 * 60 * 60 * 1_000;
 const FILE_POLL_INTERVAL_MS = 50;
 
 let sharedDirectory: string | undefined;
+let waiterRefreshTimer: ReturnType<typeof setInterval> | undefined;
 const ownedFiles = new Set<string>();
 const armedInterceptions = new Set<symbol>();
 const activeInterceptions = new Set<() => void>();
@@ -361,8 +363,25 @@ class PageDownloadArtifact implements DownloadArtifact {
 // Every process that waits for a download leaves `waiters/<pid>` in the shared
 // directory while it waits. The last live waiter restores the default
 // behavior; the others leave it alone so their downloads keep landing here.
+// A marker is rewritten while its process waits, so one that stopped aging
+// belongs to a process that died and whose pid another process now holds.
 function claimSharedBehavior(token: symbol): void {
   armedInterceptions.add(token);
+  writeWaiterMarker();
+  if (!waiterRefreshTimer) {
+    waiterRefreshTimer = setInterval(writeWaiterMarker, WAITER_REFRESH_MS);
+    waiterRefreshTimer.unref?.();
+  }
+}
+
+function releaseSharedBehavior(token: symbol): boolean {
+  armedInterceptions.delete(token);
+  if (armedInterceptions.size > 0) return false;
+  stopWaiterMarker();
+  return !hasOtherLiveWaiter();
+}
+
+function writeWaiterMarker(): void {
   try {
     writeFileSync(
       waiterMarkerPath(),
@@ -373,11 +392,10 @@ function claimSharedBehavior(token: symbol): void {
   }
 }
 
-function releaseSharedBehavior(token: symbol): boolean {
-  armedInterceptions.delete(token);
-  if (armedInterceptions.size > 0) return false;
+function stopWaiterMarker(): void {
+  if (waiterRefreshTimer) clearInterval(waiterRefreshTimer);
+  waiterRefreshTimer = undefined;
   rmSync(waiterMarkerPath(), { force: true });
-  return !hasOtherLiveWaiter();
 }
 
 function waiterMarkerPath(): string {
@@ -461,7 +479,7 @@ export function disposeDownloadArtifacts(): void {
   activeDownloadTargets.clear();
   if (armedInterceptions.size > 0) {
     armedInterceptions.clear();
-    if (sharedDirectory) rmSync(waiterMarkerPath(), { force: true });
+    if (sharedDirectory) stopWaiterMarker();
   }
   for (const path of ownedFiles) {
     rmSync(path, { force: true });
