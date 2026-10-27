@@ -29,9 +29,9 @@ The output directory is `dist/plugins/ego-v2.2.0/`:
 | Grok Build       | `ego-grok-build-v2.2.0.zip`       | Agent Plugins and Claude-compatible manifests      |
 | WorkBuddy        | `ego-workbuddy-v2.2.0.zip`        | Local marketplace and CodeBuddy manifest           |
 | QwenWork Desktop | `ego-qwenwork-v2.2.0.zip`         | Claude-compatible expert kit                       |
-| OpenCode         | `ego-opencode-v2.2.0.tgz`         | `@citrolabs/ego-opencode` npm package              |
-| DeepSeek Harness | `ego-deepseek-harness-v2.2.0.tgz` | `@citrolabs/ego-deepseek-harness` npm bundle       |
-| Pi               | `ego-pi-v2.2.0.tgz`               | `@citrolabs/ego-pi` Pi package                     |
+| OpenCode         | `ego-opencode-v2.2.0.tgz`         | `@ego-lite/opencode-plugin` npm package            |
+| DeepSeek Harness | `ego-deepseek-harness-v2.2.0.tgz` | `@ego-lite/dsh-plugin` npm bundle                  |
+| Pi               | `ego-pi-v2.2.0.tgz`               | `@ego-lite/pi-plugin` Pi package                   |
 
 Every ZIP includes a host-specific `README.md` at its root; npm archives include
 it under `package/`. The WorkBuddy ZIP contains a marketplace root with the
@@ -242,7 +242,7 @@ two install plugins differently.
 On OpenCode 1, install the package by name:
 
 ```bash
-opencode plugin @citrolabs/ego-opencode -g
+opencode plugin @ego-lite/opencode-plugin -g
 ```
 
 To remove the plugin, delete its entry from the `plugin` array of the
@@ -251,10 +251,10 @@ applicable `opencode.json` or `opencode.jsonc`.
 On OpenCode 2, `opencode plugin add` accepts only npm and Git packages:
 
 ```bash
-opencode plugin add @citrolabs/ego-opencode
+opencode plugin add @ego-lite/opencode-plugin
 ```
 
-Remove it with `opencode plugin remove @citrolabs/ego-opencode`.
+Remove it with `opencode plugin remove @ego-lite/opencode-plugin`.
 
 To try a local npm archive instead, extract it into a persistent directory and
 keep it in place; OpenCode does not install the `.tgz` itself:
@@ -269,7 +269,7 @@ The last command registers it on OpenCode 1. On OpenCode 2, add the absolute
 path of the extracted `package` directory to the `plugins` array of
 `opencode.json` in the folder that `opencode debug paths config` prints.
 
-The package is named `@citrolabs/ego-opencode`. Its `.` and `./server` exports
+The package is named `@ego-lite/opencode-plugin`. Its `.` and `./server` exports
 load `index.js`, whose default export serves both versions. OpenCode 1 calls
 `server()`, which adds the packaged `skills/` directory to its Skill paths and
 offers ego-browser as the `/ego-browser` command. OpenCode 2 calls `setup()`,
@@ -284,7 +284,7 @@ See the plugin guides for [OpenCode 1](https://opencode.ai/docs/plugins/) and
 Add the package to the desired profile by name:
 
 ```bash
-dsh plugin --profile web add @citrolabs/ego-deepseek-harness
+dsh plugin --profile web add @ego-lite/dsh-plugin
 dsh --profile web --dump-config
 dsh --profile web
 ```
@@ -299,10 +299,10 @@ dsh plugin --profile web add /absolute/path/to/ego-deepseek-harness-v2.2.0.tgz
 The bundle declares `engines.dsh` as `>=0.2.0`, and DSH refuses it on earlier
 versions.
 
-The package is named `@citrolabs/ego-deepseek-harness`. Its bundle patch loads
-`@citrolabs/ego-deepseek-harness/dsh` and registers the packaged Skill. Use
+The package is named `@ego-lite/dsh-plugin`. Its bundle patch loads
+`@ego-lite/dsh-plugin/dsh` and registers the packaged Skill. Use
 `/ego-browser`. Remove it with
-`dsh plugin --profile web remove @citrolabs/ego-deepseek-harness`.
+`dsh plugin --profile web remove @ego-lite/dsh-plugin`.
 
 An existing personal `ego-browser` Skill takes precedence over this bundled
 provider. Check the base directory returned by the Skill tool: it must point
@@ -316,13 +316,13 @@ See the [DeepSeek Harness local package guide](https://github.com/deepseek-ai/de
 Install the npm package, or a local npm archive:
 
 ```bash
-pi install npm:@citrolabs/ego-pi
-pi install "npm:@citrolabs/ego-pi@file:/absolute/path/to/ego-pi-v2.2.0.tgz"
+pi install npm:@ego-lite/pi-plugin
+pi install "npm:@ego-lite/pi-plugin@file:/absolute/path/to/ego-pi-v2.2.0.tgz"
 ```
 
 Pass the archive through the `npm:` source: a bare `.tgz` path installs without
 loading any Skill. Use `/skill:ego-browser`. Remove it with
-`pi remove npm:@citrolabs/ego-pi`.
+`pi remove npm:@ego-lite/pi-plugin`.
 
 The package declares the `pi-package` keyword, which makes a published package
 eligible for the [Pi package gallery](https://pi.dev/packages), and `pi.image`

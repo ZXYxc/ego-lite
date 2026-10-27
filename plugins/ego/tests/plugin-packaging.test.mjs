@@ -53,6 +53,11 @@ const npmKeywords = {
   "deepseek-harness": "deepseek-harness",
   pi: "pi-package",
 };
+const npmNames = {
+  opencode: "@ego-lite/opencode-plugin",
+  "deepseek-harness": "@ego-lite/dsh-plugin",
+  pi: "@ego-lite/pi-plugin",
+};
 
 function write(path, value) {
   mkdirSync(dirname(path), { recursive: true });
@@ -250,7 +255,7 @@ function assertArtifacts(root, output, name, version, skillName) {
         const pkg = JSON.parse(
           readFileSync(join(plugin, "package.json"), "utf8"),
         );
-        assert.equal(pkg.name, `${sourcePackage.name}-${id}`);
+        assert.equal(pkg.name, npmNames[id]);
         assert.equal(pkg.version, version);
         assert.equal(
           pkg.scripts,
@@ -355,7 +360,7 @@ function assertArtifacts(root, output, name, version, skillName) {
         import assert from 'node:assert/strict';
         import { existsSync } from 'node:fs';
         import { join } from 'node:path';
-        import plugin from '@citrolabs/ego-opencode/server';
+        import plugin from '@ego-lite/opencode-plugin/server';
         const config = {};
         await (await plugin.server()).config(config);
         assert.ok(existsSync(join(config.skills.paths[0], 'ego-browser', 'SKILL.md')));
