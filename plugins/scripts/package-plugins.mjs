@@ -71,7 +71,9 @@ const TARGETS = [
       "./dsh": "./dsh/src/index.js",
       "./package.json": "./package.json",
     },
-    package: { engines: { dsh: ">=0.2.0 <0.3.0" } },
+    // No upper bound: a published version stays installable on later DSH
+    // releases instead of being refused by a range it cannot know about.
+    package: () => ({ engines: { dsh: ">=0.2.0" } }),
   },
   {
     id: "pi",
@@ -79,13 +81,14 @@ const TARGETS = [
     files: [],
     npm: true,
     keywords: ["pi-package"],
-    package: {
+    // The gallery image comes from the release tag, so a published version
+    // keeps its preview when the default branch moves the file.
+    package: (version) => ({
       pi: {
         skills: ["./skills"],
-        image:
-          "https://raw.githubusercontent.com/citrolabs/ego-lite/main/skills/ego-browser/assets/logo.png",
+        image: `https://raw.githubusercontent.com/citrolabs/ego-lite/v${version}/skills/ego-browser/assets/logo.png`,
       },
-    },
+    }),
   },
 ];
 
@@ -386,7 +389,7 @@ async function packagePlugin(repositoryRoot, name, outputRoot) {
           files: ["LICENSE", "README.md", "skills", ...target.files],
           keywords: [...target.keywords, ...sourcePackage.keywords],
           exports: target.exports,
-          ...target.package,
+          ...target.package?.(manifest.version),
         };
         delete pkg.scripts;
         if (target.id === "deepseek-harness") {

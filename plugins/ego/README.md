@@ -47,8 +47,8 @@ none depends on the source checkout.
 
 Every host that reads a plugin logo uses the Skill's
 `assets/logo.png`: Codex `interface.logo`, Claude Code `icon`, Cursor `logo`,
-and the Pi gallery `pi.image`. The Codex composer icon is the same mark at
-256 px.
+and the Pi gallery `pi.image`, which points at the file under the release tag.
+The Codex composer icon is the same mark at 256 px.
 
 Override the output parent directory, or package all plugin directories:
 
@@ -239,8 +239,25 @@ The package works with OpenCode 1 and OpenCode 2, which ships as
 `@opencode/cli`. Run `opencode --version` to see which one is installed; the
 two install plugins differently.
 
-On OpenCode 1, extract the local npm archive into a persistent directory, then
-register the extracted package directory:
+On OpenCode 1, install the package by name:
+
+```bash
+opencode plugin @citrolabs/ego-opencode -g
+```
+
+To remove the plugin, delete its entry from the `plugin` array of the
+applicable `opencode.json` or `opencode.jsonc`.
+
+On OpenCode 2, `opencode plugin add` accepts only npm and Git packages:
+
+```bash
+opencode plugin add @citrolabs/ego-opencode
+```
+
+Remove it with `opencode plugin remove @citrolabs/ego-opencode`.
+
+To try a local npm archive instead, extract it into a persistent directory and
+keep it in place; OpenCode does not install the `.tgz` itself:
 
 ```bash
 mkdir -p /absolute/path/to/ego-opencode
@@ -248,23 +265,9 @@ tar -xzf /absolute/path/to/ego-opencode-v2.2.0.tgz -C /absolute/path/to/ego-open
 opencode plugin /absolute/path/to/ego-opencode/package -g
 ```
 
-Keep the extracted directory in place. OpenCode does not install the `.tgz`
-itself. Once the package is published, install it by name instead:
-`opencode plugin @citrolabs/ego-opencode -g`. To remove the plugin, delete its
-entry from the `plugin` array of the applicable `opencode.json` or
-`opencode.jsonc`.
-
-On OpenCode 2, `opencode plugin add` accepts only npm and Git packages. Once the
-package is published, install it with:
-
-```bash
-opencode plugin add @citrolabs/ego-opencode
-```
-
-Remove it with `opencode plugin remove @citrolabs/ego-opencode`. To try the
-local archive first, extract it as above, then add the absolute path of the
-extracted `package` directory to the `plugins` array of `opencode.json` in the
-folder that `opencode debug paths config` prints.
+The last command registers it on OpenCode 1. On OpenCode 2, add the absolute
+path of the extracted `package` directory to the `plugins` array of
+`opencode.json` in the folder that `opencode debug paths config` prints.
 
 The package is named `@citrolabs/ego-opencode`. Its `.` and `./server` exports
 load `index.js`, whose default export serves both versions. OpenCode 1 calls
@@ -278,18 +281,23 @@ See the plugin guides for [OpenCode 1](https://opencode.ai/docs/plugins/) and
 
 ### DeepSeek Harness
 
-Add the npm archive to the desired profile:
+Add the package to the desired profile by name:
 
 ```bash
-dsh plugin --profile web add /absolute/path/to/ego-deepseek-harness-v2.2.0.tgz
+dsh plugin --profile web add @citrolabs/ego-deepseek-harness
 dsh --profile web --dump-config
 dsh --profile web
 ```
 
-DSH copies the archive into the profile. Once the package is published, add it
-by name instead, `dsh plugin --profile web add @citrolabs/ego-deepseek-harness`;
-only a package added by name receives update notices. The bundle declares
-`engines.dsh` as `>=0.2.0 <0.3.0`, and DSH refuses it outside that range.
+Only a package added by name receives update notices. To try a local npm
+archive instead, add its path; DSH copies the archive into the profile:
+
+```bash
+dsh plugin --profile web add /absolute/path/to/ego-deepseek-harness-v2.2.0.tgz
+```
+
+The bundle declares `engines.dsh` as `>=0.2.0`, and DSH refuses it on earlier
+versions.
 
 The package is named `@citrolabs/ego-deepseek-harness`. Its bundle patch loads
 `@citrolabs/ego-deepseek-harness/dsh` and registers the packaged Skill. Use
@@ -305,7 +313,7 @@ See the [DeepSeek Harness local package guide](https://github.com/deepseek-ai/de
 
 ### Pi
 
-Install the npm package, or the downloaded archive before it is published:
+Install the npm package, or a local npm archive:
 
 ```bash
 pi install npm:@citrolabs/ego-pi

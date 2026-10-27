@@ -272,16 +272,17 @@ function assertArtifacts(root, output, name, version, skillName) {
           assert.equal(pkg.exports, undefined);
           assert.equal(pkg.dsh, undefined);
           assert.deepEqual(pkg.pi.skills, ["./skills"]);
-          assert.match(
+          assert.equal(
             pkg.pi.image,
-            /^https:\/\/raw\.githubusercontent\.com\/citrolabs\/ego-lite\/main\/skills\/ego-browser\/assets\/logo\.png$/,
+            `https://raw.githubusercontent.com/citrolabs/ego-lite/v${sourcePackage.version}/skills/ego-browser/assets/logo.png`,
+            "the gallery image is pinned to the release tag",
           );
         } else {
           assert.deepEqual(pkg.exports, {
             "./dsh": "./dsh/src/index.js",
             "./package.json": "./package.json",
           });
-          assert.deepEqual(pkg.engines, { dsh: ">=0.2.0 <0.3.0" });
+          assert.deepEqual(pkg.engines, { dsh: ">=0.2.0" });
           assert.deepEqual(pkg.dsh, {
             bundle: { patch: "./cordis.patch.yml" },
           });
