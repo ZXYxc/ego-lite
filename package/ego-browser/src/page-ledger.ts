@@ -8,9 +8,9 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { runtimeStateDir } from "./env.js";
 import {
   validatePageRefState,
   type PageRefState,
@@ -130,10 +130,7 @@ export class PageLedgerStore {
   #cleanup?: Promise<void>;
 
   constructor(options: PageLedgerStoreOptions = {}) {
-    this.rootDir =
-      options.rootDir ||
-      process.env.EGO_BROWSER_STATE_DIR ||
-      join(homedir(), ".ego-browser", "state");
+    this.rootDir = options.rootDir || runtimeStateDir();
     this.#browserInstanceId = options.browserInstanceId;
     this.#staleAfterMs =
       options.staleAfterMs === undefined
