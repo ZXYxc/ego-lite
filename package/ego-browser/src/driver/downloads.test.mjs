@@ -253,6 +253,32 @@ test("cancel scopes the download guid to its browser context", async () => {
   disposeDownloadArtifacts();
 });
 
+test("a rejected ready still restores the session it may have configured", async () => {
+  const services = recordingServices();
+  services.cdp = async (method, params, sessionId) => {
+    services.calls.push({ method, params, sessionId });
+    if (params.behavior === "allowAndName") {
+      throw new Error("Page.setDownloadBehavior timed out after 3000ms");
+    }
+    return {};
+  };
+  const interception = preparePageDownload(services, "target-rejected", {
+    timeoutMs: 1_000,
+  });
+  void interception.event.catch(() => {});
+
+  await assert.rejects(interception.ready("session-rejected"), /timed out/);
+  await access(waiterMarker(process.pid));
+  await interception.dispose(new Error("arming failed"));
+
+  assert.deepEqual(behaviorCalls(services.calls), [
+    { behavior: "allowAndName", sessionId: "session-rejected" },
+    { behavior: "default", sessionId: "session-rejected" },
+  ]);
+  await assert.rejects(access(waiterMarker(process.pid)));
+  disposeDownloadArtifacts();
+});
+
 test("one target cannot arm two download waits at the same time", async () => {
   const services = recordingServices();
   const first = preparePageDownload(services, "target-shared", {

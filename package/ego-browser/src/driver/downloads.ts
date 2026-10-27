@@ -257,13 +257,15 @@ export function preparePageDownload(
         throw new Error("download waiter is no longer active");
       }
       const downloadPath = downloadDirectory();
+      // Register the session before sending: a rejected call (a timeout, say)
+      // may still have been applied, and the restore must reach that session.
+      configuredSessions.add(sessionId);
       claimSharedBehavior(token);
       await services.cdp(
         "Page.setDownloadBehavior",
         { behavior: "allowAndName", downloadPath },
         sessionId,
       );
-      configuredSessions.add(sessionId);
     },
     event,
     async dispose(reason = new Error("download waiter was disposed")) {
