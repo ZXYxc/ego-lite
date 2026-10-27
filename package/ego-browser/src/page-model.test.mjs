@@ -5899,9 +5899,10 @@ for (const mode of ["page", "same-process iframe", "OOPIF"]) {
   });
 }
 
-test("a navigation during snapshot capture never publishes refs for a mixed document", async () => {
+test("a navigation during snapshot capture is retried against the new document", async () => {
   await withFixture(async (fixture) => {
     let loaderId = "before";
+    let captures = 0;
     const baseCdp = fixture.services.cdp;
     const task = taskForRound(fixture, "round-a", {
       async cdp(method, params, sessionId) {
@@ -5910,7 +5911,103 @@ test("a navigation during snapshot capture never publishes refs for a mixed docu
         return baseCdp(method, params, sessionId);
       },
       async snapshot() {
+        captures += 1;
+        // The commit lands while the first capture is in flight; the retry
+        // sees the stable new document.
         loaderId = "after";
+        return {
+          content:
+            captures === 1
+              ? 'button "Old document" [ref=1]'
+              : 'button "Save" [ref=1]',
+          refs: [{ refId: 1, backendNodeId: 40 + captures }],
+        };
+      },
+    });
+    const page = await openTestPage(task, "https://example.test/first");
+    const content = await page.snapshot();
+    assert.equal(
+      captures,
+      2,
+      "the mixed capture is discarded and retried once",
+    );
+    assert.match(content, /Save.*\[ref=1\]/);
+    assert.doesNotMatch(content, /Old document/);
+    assert.equal(
+      fixture.services.pageRefs.forTarget(page.targetId).get("1")
+        ?.backendNodeId,
+      42,
+      "only the stable capture publishes refs",
+    );
+  });
+});
+
+test("a subtree snapshot whose root document commits away is stale, not retried with the old root", async () => {
+  await withFixture(async (fixture) => {
+    let loaderId = "before";
+    const requestedRoots = [];
+    const baseCdp = fixture.services.cdp;
+    const task = taskForRound(fixture, "round-a", {
+      async cdp(method, params, sessionId) {
+        if (method === "Page.getFrameTree")
+          return { frameTree: { frame: { id: "main", loaderId } } };
+        return baseCdp(method, params, sessionId);
+      },
+      async snapshot(options) {
+        if (options.scope !== "subtree") {
+          return {
+            content: 'button "First" [ref=21]',
+            refs: [{ refId: 21, backendNodeId: 21 }],
+          };
+        }
+        requestedRoots.push(options.root);
+        // The navigation commits while the subtree capture is in flight.
+        loaderId = "after";
+        return {
+          content: 'button "First" [ref=21]',
+          refs: [{ refId: 21, backendNodeId: 21 }],
+        };
+      },
+    });
+    const page = await openTestPage(task, "https://example.test/first");
+    await page.snapshot({ scope: "full_page" });
+
+    await assert.rejects(
+      () => page.snapshot({ scope: "subtree", root: "@21" }),
+      (error) => {
+        assert.match(error.message, /Stale ref: @21; take a new snapshot/);
+        assert.equal(error.kind, "permanent");
+        return true;
+      },
+    );
+    assert.deepEqual(
+      requestedRoots,
+      [21],
+      "the old document's root is not reused for a retry",
+    );
+    assert.equal(
+      fixture.services.pageRefs.isInvalidated(page.targetId, "21"),
+      true,
+    );
+  });
+});
+
+test("a page that keeps navigating during snapshot captures fails after bounded retries", async () => {
+  await withFixture(async (fixture) => {
+    let loaderId = 0;
+    let captures = 0;
+    const baseCdp = fixture.services.cdp;
+    const task = taskForRound(fixture, "round-a", {
+      async cdp(method, params, sessionId) {
+        if (method === "Page.getFrameTree")
+          return {
+            frameTree: { frame: { id: "main", loaderId: `load-${loaderId}` } },
+          };
+        return baseCdp(method, params, sessionId);
+      },
+      async snapshot() {
+        captures += 1;
+        loaderId += 1;
         return {
           content: 'button "Save" [ref=1]',
           refs: [{ refId: 1, backendNodeId: 42 }],
@@ -5918,15 +6015,19 @@ test("a navigation during snapshot capture never publishes refs for a mixed docu
       },
     });
     const page = await openTestPage(task, "https://example.test/first");
-    await assert.rejects(() => page.snapshot(), /Page changed during snapshot/);
+    await assert.rejects(
+      () => page.snapshot(),
+      (error) => {
+        assert.match(error.message, /Page changed during snapshot/);
+        assert.equal(error.kind, "transient");
+        return true;
+      },
+    );
+    assert.equal(captures, 3, "one capture plus two retries");
     assert.equal(
       fixture.services.pageRefs.forTarget(page.targetId).get("1"),
       undefined,
-    );
-    assert.match(
-      await page.snapshot(),
-      /\[ref=1\]/,
-      "an explicit retry captures the stable new document",
+      "a mixed capture never publishes refs",
     );
   });
 });
