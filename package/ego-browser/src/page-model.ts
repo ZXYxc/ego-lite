@@ -2002,6 +2002,19 @@ class Page {
         const beforeDocuments = documents;
         result = await capture();
         documents = await this.#pageDocuments(page, sessionId);
+        if (rootRefId) {
+          // The subtree root is a node of the document the refs were taken
+          // from. Once that document is gone, a retry would capture whatever
+          // node now carries its backend id, so the root is stale instead.
+          const registry = this.#services.pageRefs;
+          registry.invalidateChangedDocuments(page.targetId, documents);
+          if (registry.isInvalidated(page.targetId, rootRefId)) {
+            throw new ElementResolutionError(
+              `Stale ref: @${rootRefId}; take a new snapshot`,
+              "permanent",
+            );
+          }
+        }
         const changed = (result?.refs || []).some((ref) => {
           const documentId = pageRefDocumentId(ref, documents);
           return (

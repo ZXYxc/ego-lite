@@ -5942,6 +5942,56 @@ test("a navigation during snapshot capture is retried against the new document",
   });
 });
 
+test("a subtree snapshot whose root document commits away is stale, not retried with the old root", async () => {
+  await withFixture(async (fixture) => {
+    let loaderId = "before";
+    const requestedRoots = [];
+    const baseCdp = fixture.services.cdp;
+    const task = taskForRound(fixture, "round-a", {
+      async cdp(method, params, sessionId) {
+        if (method === "Page.getFrameTree")
+          return { frameTree: { frame: { id: "main", loaderId } } };
+        return baseCdp(method, params, sessionId);
+      },
+      async snapshot(options) {
+        if (options.scope !== "subtree") {
+          return {
+            content: 'button "First" [ref=21]',
+            refs: [{ refId: 21, backendNodeId: 21 }],
+          };
+        }
+        requestedRoots.push(options.root);
+        // The navigation commits while the subtree capture is in flight.
+        loaderId = "after";
+        return {
+          content: 'button "First" [ref=21]',
+          refs: [{ refId: 21, backendNodeId: 21 }],
+        };
+      },
+    });
+    const page = await openTestPage(task, "https://example.test/first");
+    await page.snapshot({ scope: "full_page" });
+
+    await assert.rejects(
+      () => page.snapshot({ scope: "subtree", root: "@21" }),
+      (error) => {
+        assert.match(error.message, /Stale ref: @21; take a new snapshot/);
+        assert.equal(error.kind, "permanent");
+        return true;
+      },
+    );
+    assert.deepEqual(
+      requestedRoots,
+      [21],
+      "the old document's root is not reused for a retry",
+    );
+    assert.equal(
+      fixture.services.pageRefs.isInvalidated(page.targetId, "21"),
+      true,
+    );
+  });
+});
+
 test("a page that keeps navigating during snapshot captures fails after bounded retries", async () => {
   await withFixture(async (fixture) => {
     let loaderId = 0;
