@@ -635,6 +635,10 @@ const POPUP_POLL_SETTLE_MS = 50;
 // tracking (see ensureFrameSessions), so navigation keeps the settle that the
 // previous tab-list diff provided. Input actions do not need it.
 const NAVIGATION_FRAME_SETTLE_MS = 60;
+// A snapshot whose capture straddles a document commit is retried against the
+// new document. Two retries absorb the common "action, then snapshot" race
+// without turning a page that keeps navigating into an unbounded loop.
+const SNAPSHOT_DOCUMENT_CHANGE_RETRIES = 2;
 // A file chooser request can trail the input acknowledgement. When the page
 // reports that the action clicked a file input, wait for the chooser event
 // (it resolves the race early); when the page could not be asked, fall back
@@ -1966,38 +1970,55 @@ class Page {
       }
       const { root: _root, ...snapshotOptions } = options;
       const snapshotScope = options.scope ?? "only_within_viewport";
-      const beforeDocuments = await this.#pageDocuments(page, sessionId);
-      const result = await this.#services.snapshot({
-        ...snapshotOptions,
-        ...(root === undefined ? {} : { root }),
-        scope: snapshotScope,
-        includeActionMarks: options.includeActionMarks ?? true,
-        includeStableLocator: options.includeStableLocator ?? true,
-      });
-      const iframeSessions =
-        Array.isArray(result?.refs) && result.refs.length > 0
-          ? await this.#frameSessions(page)
-          : new Map<string, string>();
-      await preparePageSnapshotResult(
-        this.#services,
-        sessionId,
-        iframeSessions,
-        result,
-        rootContext,
-      );
-      const documents = await this.#pageDocuments(page, sessionId);
-      for (const ref of result?.refs || []) {
-        const documentId = pageRefDocumentId(ref, documents);
-        if (
-          !documentId ||
-          documentId !== pageRefDocumentId(ref, beforeDocuments)
-        ) {
+      const capture = async () => {
+        const result = await this.#services.snapshot({
+          ...snapshotOptions,
+          ...(root === undefined ? {} : { root }),
+          scope: snapshotScope,
+          includeActionMarks: options.includeActionMarks ?? true,
+          includeStableLocator: options.includeStableLocator ?? true,
+        });
+        const iframeSessions =
+          Array.isArray(result?.refs) && result.refs.length > 0
+            ? await this.#frameSessions(page)
+            : new Map<string, string>();
+        await preparePageSnapshotResult(
+          this.#services,
+          sessionId,
+          iframeSessions,
+          result,
+          rootContext,
+        );
+        return result;
+      };
+      // An input action that triggers a navigation returns before the new
+      // document commits, so the commit often lands inside the very next
+      // snapshot. A capture that straddles a commit mixes two documents and is
+      // discarded; the documents read after it are the baseline for the retry,
+      // which captures the stable new document in the common case.
+      let documents = await this.#pageDocuments(page, sessionId);
+      let result: Awaited<ReturnType<typeof capture>>;
+      for (let attempt = 0; ; attempt += 1) {
+        const beforeDocuments = documents;
+        result = await capture();
+        documents = await this.#pageDocuments(page, sessionId);
+        const changed = (result?.refs || []).some((ref) => {
+          const documentId = pageRefDocumentId(ref, documents);
+          return (
+            !documentId ||
+            documentId !== pageRefDocumentId(ref, beforeDocuments)
+          );
+        });
+        if (!changed) break;
+        if (attempt >= SNAPSHOT_DOCUMENT_CHANGE_RETRIES) {
           throw new ElementResolutionError(
             "Page changed during snapshot; take a new snapshot",
             "transient",
           );
         }
-        ref.documentId = documentId;
+      }
+      for (const ref of result?.refs || []) {
+        ref.documentId = pageRefDocumentId(ref, documents);
       }
       await this.#loadRefs(page);
       this.#services.pageRefs.invalidateChangedDocuments(
