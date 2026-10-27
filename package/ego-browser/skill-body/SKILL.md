@@ -488,8 +488,8 @@ await download.saveAs("/absolute/path/report.pdf");
 directories. `download.path()` returns the round-local temporary file;
 `failure()`, `cancel()`, and `delete()` manage its lifecycle. Temporary download
 files are removed when the SDK round is disposed, so call `saveAs()` before the
-script ends. Do not set a global download directory with raw CDP; each download
-wait configures and restores only the addressed Page session.
+script ends. Do not set a download directory with raw CDP; the download wait
+manages the browser's single shared download setting.
 
 `page.fetch()` runs `window.fetch()` in the Page: relative URLs, cookies, and
 service workers use that Page, and browser CORS still applies. It returns

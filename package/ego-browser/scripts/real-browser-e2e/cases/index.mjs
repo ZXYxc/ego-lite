@@ -51,6 +51,7 @@ import {
 } from "./page-action-latency.mjs";
 import {
   concurrentTaskSpaceDownloadCase,
+  concurrentPageSlowDownloadCase,
   pageDownloadCase,
   pageDownloadPrepareRoundCase,
   pagePdfViewerDownloadCase,
@@ -201,6 +202,10 @@ export const e2eCases = [
   {
     name: "Concurrent TaskSpace downloads",
     body: concurrentTaskSpaceDownloadCase,
+  },
+  {
+    name: "Concurrent Page downloads: slow response",
+    body: concurrentPageSlowDownloadCase,
   },
   {
     name: "Page Chromium PDF viewer download",

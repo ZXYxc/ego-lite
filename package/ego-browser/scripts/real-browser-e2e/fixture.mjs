@@ -64,13 +64,22 @@ export async function startFixtureServer(taskName) {
         ? `ego-browser ${space} TaskSpace download\n`
         : "ego-browser download fixture\n";
       const filename = space ? `ego-${space}-download.txt` : "ego-download.txt";
-      res.writeHead(200, {
-        "content-type": "text/plain",
-        "content-length": Buffer.byteLength(body),
-        "content-disposition": `attachment; filename="${filename}"`,
-        "cache-control": "no-store",
-      });
-      res.end(body);
+      // `delay` holds the response headers back, like a server that generates
+      // an export before it answers: Chromium only creates the download, and
+      // picks its target directory, once the headers arrive.
+      const delayMs = Math.min(
+        Number(url.searchParams.get("delay")) || 0,
+        10_000,
+      );
+      setTimeout(() => {
+        res.writeHead(200, {
+          "content-type": "text/plain",
+          "content-length": Buffer.byteLength(body),
+          "content-disposition": `attachment; filename="${filename}"`,
+          "cache-control": "no-store",
+        });
+        res.end(body);
+      }, delayMs);
       return;
     }
     if (url.pathname === "/api/openai-gpt-4-system-card.pdf") {
