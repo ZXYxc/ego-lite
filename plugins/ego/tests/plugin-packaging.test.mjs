@@ -67,7 +67,7 @@ function writeJson(path, value) {
   write(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-function addPlugin(root, name, version, skillName) {
+function addPlugin(root, name, version, skillName, npmPackages) {
   const pluginRoot = join(root, "plugins", name);
   const manifest = {
     name,
@@ -102,6 +102,7 @@ function addPlugin(root, name, version, skillName) {
       "./dsh": "./dsh/src/index.js",
     },
     dsh: { bundle: { patch: "./cordis.patch.yml" } },
+    npmPackages,
     keywords: ["agent-plugin"],
   });
   write(join(pluginRoot, "index.js"), "export default async () => ({});\n");
@@ -139,7 +140,7 @@ function createFixture() {
     join(repositoryRoot, "plugins", "scripts", "package-plugins.mjs"),
     join(root, "plugins", "scripts", "package-plugins.mjs"),
   );
-  addPlugin(root, "ego", "1.3.1", "ego-browser");
+  addPlugin(root, "ego", "1.3.1", "ego-browser", npmNames);
   addPlugin(root, "sample", "2.4.0", "sample-skill");
   return root;
 }
@@ -255,7 +256,12 @@ function assertArtifacts(root, output, name, version, skillName) {
         const pkg = JSON.parse(
           readFileSync(join(plugin, "package.json"), "utf8"),
         );
-        assert.equal(pkg.name, npmNames[id]);
+        assert.equal(
+          pkg.name,
+          name === "ego" ? npmNames[id] : `${sourcePackage.name}-${id}`,
+          "only ego names its npm packages; other plugins derive theirs",
+        );
+        assert.equal(pkg.npmPackages, undefined);
         assert.equal(pkg.version, version);
         assert.equal(
           pkg.scripts,

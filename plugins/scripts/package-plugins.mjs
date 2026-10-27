@@ -58,7 +58,6 @@ const TARGETS = [
     title: "OpenCode",
     files: ["index.js"],
     npm: true,
-    packageName: "@ego-lite/opencode-plugin",
     keywords: ["opencode"],
     exports: { ".": "./index.js", "./server": "./index.js" },
   },
@@ -67,7 +66,6 @@ const TARGETS = [
     title: "DeepSeek Harness",
     files: ["cordis.patch.yml", "dsh/src/index.js"],
     npm: true,
-    packageName: "@ego-lite/dsh-plugin",
     keywords: ["deepseek-harness"],
     exports: {
       "./dsh": "./dsh/src/index.js",
@@ -82,7 +80,6 @@ const TARGETS = [
     title: "Pi",
     files: [],
     npm: true,
-    packageName: "@ego-lite/pi-plugin",
     keywords: ["pi-package"],
     // The gallery image comes from the release tag, so a published version
     // keeps its preview when the default branch moves the file.
@@ -388,13 +385,17 @@ async function packagePlugin(repositoryRoot, name, outputRoot) {
       if (target.npm) {
         const pkg = {
           ...sourcePackage,
-          name: target.packageName,
+          // A plugin may name its npm packages; otherwise derive them.
+          name:
+            sourcePackage.npmPackages?.[target.id] ??
+            `${sourcePackage.name}-${target.id}`,
           files: ["LICENSE", "README.md", "skills", ...target.files],
           keywords: [...target.keywords, ...sourcePackage.keywords],
           exports: target.exports,
           ...target.package?.(manifest.version),
         };
         delete pkg.scripts;
+        delete pkg.npmPackages;
         if (target.id === "deepseek-harness") {
           const patchPath = join(payloadRoot, "cordis.patch.yml");
           const patch = await readFile(patchPath, "utf8");

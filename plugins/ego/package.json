@@ -32,6 +32,11 @@
       "patch": "./cordis.patch.yml"
     }
   },
+  "npmPackages": {
+    "opencode": "@ego-lite/opencode-plugin",
+    "deepseek-harness": "@ego-lite/dsh-plugin",
+    "pi": "@ego-lite/pi-plugin"
+  },
   "keywords": [
     "agent-plugin",
     "browser",
