@@ -76,6 +76,29 @@ test("invokeEgo recognizes a permission reason from a rejected native call", asy
   );
 });
 
+test("permission handoff guidance directs users to the Space before resuming", async () => {
+  let calls = 0;
+  await assert.rejects(
+    () =>
+      invokeEgo("snapshot", async () => {
+        calls += 1;
+        return {
+          error: "notifications",
+          error_code: "EGO_TASK_SPACE_USER_IN_CONTROL",
+        };
+      }),
+    (error) => {
+      assert.equal(error.error_code, "EGO_TASK_SPACE_USER_IN_CONTROL");
+      assert.match(error.message, /Open .*Space in ego lite/);
+      assert.match(error.message, /background Space/);
+      assert.match(error.message, /confirm.*after.*handled/);
+      assert.match(error.message, /takeOverTaskSpace\(spaceId\)/);
+      return true;
+    },
+  );
+  assert.equal(calls, 1);
+});
+
 test("user-control reason lookup ignores inherited object properties", () => {
   const { message } = resolveEgoError({
     error: "constructor",

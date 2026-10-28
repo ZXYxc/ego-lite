@@ -101,8 +101,8 @@ function permissionPrompt(access: string): string {
 function userPromptGuidance(firstLine: string): string {
   return [
     firstLine,
-    "The user now controls this task space. Wait for the user to handle the prompt.",
-    "Resume only after the user confirms, using takeOverTaskSpace(spaceId).",
+    "The user now controls this task space. Open the task's Space in ego lite to handle the prompt; it may be hidden in a background Space.",
+    "Ask the user to confirm only after the prompt has been handled, then resume using takeOverTaskSpace(spaceId).",
   ].join("\n");
 }
 
