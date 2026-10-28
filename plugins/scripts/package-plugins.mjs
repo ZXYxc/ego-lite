@@ -385,13 +385,17 @@ async function packagePlugin(repositoryRoot, name, outputRoot) {
       if (target.npm) {
         const pkg = {
           ...sourcePackage,
-          name: `${sourcePackage.name}-${target.id}`,
+          // A plugin may name its npm packages; otherwise derive them.
+          name:
+            sourcePackage.npmPackages?.[target.id] ??
+            `${sourcePackage.name}-${target.id}`,
           files: ["LICENSE", "README.md", "skills", ...target.files],
           keywords: [...target.keywords, ...sourcePackage.keywords],
           exports: target.exports,
           ...target.package?.(manifest.version),
         };
         delete pkg.scripts;
+        delete pkg.npmPackages;
         if (target.id === "deepseek-harness") {
           const patchPath = join(payloadRoot, "cordis.patch.yml");
           const patch = await readFile(patchPath, "utf8");

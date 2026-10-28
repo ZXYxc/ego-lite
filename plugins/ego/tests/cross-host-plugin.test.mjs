@@ -443,9 +443,9 @@ test("plugin README documents every host as a pure-Skill install", () => {
   assert.match(readme, /\.codebuddy-plugin\/plugin\.json/);
   assert.match(readme, /\.qoder-plugin\/plugin\.json/);
   assert.match(readme, /opencode plugin \/absolute\/path/);
-  assert.match(readme, /opencode plugin add @citrolabs\/ego-opencode/);
+  assert.match(readme, /opencode plugin add @ego-lite\/opencode-plugin/);
   assert.match(readme, /dsh plugin --profile web add \/absolute\/path/);
-  assert.match(readme, /pi install npm:@citrolabs\/ego-pi/);
+  assert.match(readme, /pi install npm:@ego-lite\/pi-plugin/);
   assert.match(
     readme,
     new RegExp(
