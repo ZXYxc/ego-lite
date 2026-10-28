@@ -68,7 +68,7 @@ export function egoSource(body, context) {
       );
     }
 
-    function countColorfulPngSamples(png) {
+    function decodePng(png) {
       const signature = "89504e470d0a1a0a";
       assertEqual(png.subarray(0, 8).toString("hex"), signature, "artifact is a PNG");
       let width = 0;
@@ -132,17 +132,31 @@ export function egoSource(body, context) {
           pixels[rowOffset + x] = (raw + predictor) & 255;
         }
       }
+      return { width, height, channels, colorType, stride, pixels };
+    }
 
+    function pngRgbAt(image, x, y) {
+      const { channels, colorType, stride, pixels } = image;
+      const offset = y * stride + x * channels;
+      const red = pixels[offset];
+      const gray = colorType === 0 || colorType === 4;
+      return {
+        red,
+        green: gray ? red : pixels[offset + 1],
+        blue: gray ? red : pixels[offset + 2],
+      };
+    }
+
+    function countColorfulPngSamples(png) {
+      const image = decodePng(png);
+      const { width, height } = image;
       let colorful = 0;
       let sampled = 0;
       for (let row = 1; row <= 5; row++) {
         for (let column = 1; column <= 5; column++) {
           const x = Math.floor((width * column) / 6);
           const y = Math.floor((height * row) / 6);
-          const offset = y * stride + x * channels;
-          const red = pixels[offset];
-          const green = colorType === 0 || colorType === 4 ? red : pixels[offset + 1];
-          const blue = colorType === 0 || colorType === 4 ? red : pixels[offset + 2];
+          const { red, green, blue } = pngRgbAt(image, x, y);
           sampled++;
           if (Math.max(red, green, blue) - Math.min(red, green, blue) > 30) colorful++;
         }

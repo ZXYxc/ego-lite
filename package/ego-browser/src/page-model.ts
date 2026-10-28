@@ -28,6 +28,12 @@ import {
 import { runtimeValue } from "./cdp-eval.js";
 import { withTemporaryClipboardText } from "./clipboard.js";
 import {
+  AgentSpriteRenderer,
+  agentSpriteCommandForInput,
+  type AgentSpriteCommand,
+  type AgentSpritePort,
+} from "./driver/agent-sprite.js";
+import {
   captureScreenshotForSession,
   snapshotRaw,
   type CaptureScreenshotOptions,
@@ -503,6 +509,8 @@ type PageModelServices = {
   ): Promise<any>;
   showAgentMousePosition(x: number, y: number): Promise<void>;
   showAgentTaskState(state: string): Promise<void>;
+  /** Display-only Halloween sprite that mirrors Page input in the page. */
+  agentSprite: AgentSpritePort;
   withTemporaryClipboardText<T>(
     content: PageClipboardContent,
     action: () => Promise<T>,
@@ -649,6 +657,9 @@ const PAGE_EVALUATE_HEALTH_EXECUTION_TIMEOUT_MS = 200;
 const PAGE_EVALUATE_TERMINATE_TIMEOUT_MS = 1_000;
 const WAIT_FOR_FUNCTION_TRANSPORT_GRACE_MS = 250;
 const CONTROL_WAIT_TIMEOUT_MS = 600_000;
+// Short so an unresponsive page cannot keep sprite requests (and the CLI
+// process that owns their timers) alive long after the agent's action.
+const AGENT_SPRITE_EVALUATE_TIMEOUT_MS = 2_000;
 
 type RawActionRunner = (
   operation: (services: PageModelServices, sessionId: string) => Promise<void>,
@@ -933,6 +944,17 @@ const baseDefaultServices: Omit<PageModelServices, "ledger" | "pageBudget"> = {
     if (typeof ego.setAgentTaskState !== "function") return;
     await invokeEgo("page.mouse.label", () => ego.setAgentTaskState(state));
   },
+  agentSprite: new AgentSpriteRenderer({
+    async evaluate(sessionId, expression) {
+      const response = await browserCdp(
+        "Runtime.evaluate",
+        { expression, returnByValue: true },
+        sessionId,
+        AGENT_SPRITE_EVALUATE_TIMEOUT_MS,
+      );
+      return runtimeValue(response?.result || {}, expression);
+    },
+  }),
   withTemporaryClipboardText,
   snapshot: snapshotRaw,
   screenshot: captureScreenshotForSession,
@@ -1211,6 +1233,7 @@ class TaskSpace {
       await this.#reconcilePages();
       await this.#services.ledger.beginUserControl(this.spaceId);
       try {
+        await this.#disposeAgentSprites();
         await this.#services.handOffTaskSpace();
         this.#stopBackgroundPageDiscovery();
       } catch (error) {
@@ -1276,6 +1299,7 @@ class TaskSpace {
         return !agentUnmanagedSet.has(tab.targetId);
       });
 
+      await this.#disposeAgentSprites();
       if (
         options.keep !== "all" &&
         options.keep.length === 0 &&
@@ -1349,6 +1373,18 @@ class TaskSpace {
       await this.#services.closeTaskSpace();
       await this.#discardTerminalState();
     });
+  }
+
+  /**
+   * Remove the agent sprite from this space's pages while the agent still
+   * holds the gate; after handOff/finish the pages belong to the user.
+   */
+  async #disposeAgentSprites(): Promise<void> {
+    try {
+      await this.#services.agentSprite.disposeSpace(this.spaceId);
+    } catch {
+      // Display-only: a sprite problem must never block a lifecycle change.
+    }
   }
 
   async #discardTerminalState(): Promise<void> {
@@ -1825,6 +1861,8 @@ class Page {
   #pendingFileChooser?: PendingFileChooser;
   #pendingDownload?: PendingDownload;
   #activeDownload?: Promise<void>;
+  /** Top-level session of the action in progress; the sprite draws there. */
+  #spriteSessionId?: string;
 
   constructor(
     task: TaskSpace,
@@ -1836,7 +1874,7 @@ class Page {
     this.spaceId = task.id;
     this.#task = task;
     this.#spaceName = task.name;
-    this.#services = services;
+    this.#services = this.#withAgentSprite(services);
     this.#targetId = entry?.targetId;
     this.#openedBy = entry?.openedBy;
     this.keyboard = new PageKeyboard(
@@ -3096,9 +3134,85 @@ class Page {
     operation: (sessionId: string) => Promise<T>,
   ): Promise<T> {
     return this.#services.gate.withPage(page, async ({ sessionId }) => {
+      this.#spriteSessionId = sessionId;
       await this.#activate(page.targetId);
       return operation(sessionId);
     });
+  }
+
+  /**
+   * Services that also mirror this Page's input onto the Halloween agent
+   * sprite. The sprite only follows real input: every hook starts after the
+   * input it mirrors, is never awaited by the action, and swallows rendering
+   * failures, so actions keep their exact timing and results.
+   */
+  #withAgentSprite(services: PageModelServices): PageModelServices {
+    const page = this;
+    return {
+      ...services,
+      cdp(method, params, sessionId, timeoutMs) {
+        const result = services.cdp(method, params, sessionId, timeoutMs);
+        if (method.startsWith("Input.")) {
+          page.#showAgentSprite(
+            agentSpriteCommandForInput(
+              method,
+              params,
+              sessionId === page.#spriteSessionId,
+            ),
+          );
+        }
+        return result;
+      },
+      showAgentMousePosition(x, y) {
+        page.#showAgentSprite({ type: "point", x, y });
+        return services.showAgentMousePosition(x, y);
+      },
+      showAgentTaskState(state) {
+        page.#showAgentSprite({ type: "think", label: state });
+        return services.showAgentTaskState(state);
+      },
+      async screenshot(path, options, sessionId) {
+        let captured = false;
+        const capture = () => {
+          captured = true;
+          return services.screenshot(path, options, sessionId);
+        };
+        try {
+          return await services.agentSprite.hideDuring(sessionId, capture);
+        } catch (error) {
+          // A capture error is the caller's; a sprite error must not cost
+          // the screenshot.
+          if (captured) throw error;
+          return capture();
+        }
+      },
+    };
+  }
+
+  #showAgentSprite(command: AgentSpriteCommand | null): void {
+    if (!command) return;
+    try {
+      this.#services.agentSprite.send(
+        { spaceId: this.spaceId, sessionId: this.#spriteSessionId },
+        command,
+      );
+    } catch {
+      // Display-only, like the native cursor hint.
+    }
+  }
+
+  /** Report an action result to the sprite after a possible navigation. */
+  #showAgentSpriteOutcome(
+    sessionId: string,
+    ok: boolean,
+    replacedDocument: boolean,
+  ): void {
+    try {
+      if (replacedDocument) this.#services.agentSprite.forget(sessionId);
+    } catch {
+      // Display-only, like the native cursor hint.
+    }
+    this.#showAgentSprite({ type: "outcome", ok });
   }
 
   async #runActionBoundary<T>(
@@ -3135,6 +3249,7 @@ class Page {
     return this.#services.gate.withPage(
       page,
       async ({ sessionId }) => {
+        this.#spriteSessionId = sessionId;
         await this.#activate(page.targetId);
         await armedDownload?.interception.ready(sessionId);
         const fileChooserGuard =
@@ -3166,6 +3281,12 @@ class Page {
               receipt: { dialog },
             };
           }
+          // Not sent for a dialog: the blocked page could not draw it.
+          this.#showAgentSpriteOutcome(
+            sessionId,
+            actionError === undefined,
+            !inputAction,
+          );
 
           if (!inputAction) {
             await this.#services.sleep(NAVIGATION_FRAME_SETTLE_MS);

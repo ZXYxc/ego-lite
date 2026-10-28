@@ -39,6 +39,7 @@ async function withFixture(fn) {
 
 function createFixture(rootDir) {
   const calls = [];
+  const spriteCalls = [];
   const tabs = new Map();
   let nextTarget = 1;
   let selectedSpace = null;
@@ -736,6 +737,35 @@ function createFixture(rootDir) {
     async showAgentMousePosition(x, y) {
       calls.push(["showAgentMousePosition", x, y]);
     },
+    // Sprite calls go to their own log, stamped with the length of `calls`
+    // so tests can order them against CDP and lifecycle calls.
+    agentSprite: {
+      send(target, command) {
+        spriteCalls.push([
+          "send",
+          target.spaceId,
+          target.sessionId,
+          command,
+          calls.length,
+        ]);
+      },
+      forget(sessionId) {
+        spriteCalls.push(["forget", sessionId, calls.length]);
+      },
+      async hideDuring(sessionId, capture) {
+        spriteCalls.push(["hide", sessionId, calls.length]);
+        try {
+          return await capture();
+        } finally {
+          spriteCalls.push(["show", sessionId, calls.length]);
+        }
+      },
+      async disposeSpace(spaceId) {
+        spriteCalls.push(["disposeSpace", spaceId, calls.length]);
+        await new Promise((resolve) => setImmediate(resolve));
+        spriteCalls.push(["disposed", spaceId, calls.length]);
+      },
+    },
     async withTemporaryClipboardText(text, action) {
       calls.push(["clipboard", "write", text]);
       try {
@@ -854,6 +884,13 @@ function createFixture(rootDir) {
   return {
     activeTarget: () => activeTarget,
     calls,
+    spriteCalls,
+    /** Sprite commands sent to one session, without bookkeeping fields. */
+    spriteCommands(sessionId) {
+      return spriteCalls
+        .filter(([kind, , session]) => kind === "send" && session === sessionId)
+        .map(([, , , command]) => command);
+    },
     gate,
     rootDir,
     services,
@@ -7203,5 +7240,223 @@ test("snapshot describes a Page that stops answering after the first document ch
       },
     );
     assert.equal(calls, 2, "the second frame discovery is the one that failed");
+  });
+});
+
+test("Page actions drive the agent sprite on the Page's own session", async () => {
+  await withFixture(async (fixture) => {
+    const task = taskForRound(fixture, "round-a");
+    const page = await openTestPage(task, "https://example.test/first");
+    const session = `session:${page.targetId}`;
+    fixture.spriteCalls.length = 0;
+
+    await page.click("#cauldron", { label: "Stirring the cauldron" });
+    const clickCommands = fixture.spriteCommands(session);
+    const cursor = fixture.calls.find(
+      ([kind]) => kind === "showAgentMousePosition",
+    );
+    assert.deepEqual(clickCommands, [
+      { type: "think", label: "Stirring the cauldron" },
+      { type: "point", x: cursor[1], y: cursor[2] },
+      { type: "press", x: cursor[1], y: cursor[2] },
+      { type: "outcome", ok: true },
+    ]);
+    assert(
+      fixture.spriteCalls.every(([kind, spaceId]) =>
+        kind === "send" ? spaceId === task.spaceId : true,
+      ),
+      "sprite commands are attributed to the Page's task space",
+    );
+
+    fixture.spriteCalls.length = 0;
+    await page.fill("#text-input", "boo");
+    assert.deepEqual(fixture.spriteCommands(session), [
+      { type: "point", x: 40, y: 60 },
+      { type: "write", chars: 3 },
+      { type: "outcome", ok: true },
+    ]);
+
+    fixture.spriteCalls.length = 0;
+    await page.mouse.move(20, 30);
+    await page.mouse.wheel(0, 90);
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("hi");
+    const rawCommands = fixture.spriteCommands(session);
+    assert.deepEqual(rawCommands.slice(0, 2), [
+      { type: "point", x: 20, y: 30 },
+      { type: "scroll", deltaX: 0, deltaY: 90, x: 20, y: 30 },
+    ]);
+    const types = rawCommands.map((command) => command.type);
+    const key = types.indexOf("key");
+    assert(key > 1, "keyboard.press taps a key");
+    assert(types.indexOf("write") > key, "keyboard.type writes with the pen");
+    assert.deepEqual(
+      types.filter((type) => type === "outcome"),
+      ["outcome"],
+      "only the complete press action reacts; move, wheel, and type steps do not",
+    );
+    assert.equal(
+      types[key + 1],
+      "outcome",
+      "the press outcome follows its key",
+    );
+  });
+});
+
+test("Page actions keep the native cursor hint alongside the sprite", async () => {
+  await withFixture(async (fixture) => {
+    const task = taskForRound(fixture, "round-a");
+    const page = await openTestPage(task, "https://example.test/first");
+    const labels = [];
+    const labelled = taskForRound(fixture, "round-a", {
+      async showAgentTaskState(state) {
+        labels.push(state);
+      },
+    });
+    await labelled.page(page.label).click("#cauldron", { label: "Boo" });
+    assert.deepEqual(labels, ["Boo"]);
+    assert(
+      fixture.calls.some(([kind]) => kind === "showAgentMousePosition"),
+      "the native cursor still receives positions",
+    );
+  });
+});
+
+test("a failed Page action gives the sprite a surprised outcome", async () => {
+  await withFixture(async (fixture) => {
+    const task = taskForRound(fixture, "round-a");
+    const page = await openTestPage(task, "https://example.test/first");
+    fixture.spriteCalls.length = 0;
+    fixture.timeoutNextMouseDispatch();
+
+    await assert.rejects(() => page.click("#cauldron"), /timed out/);
+
+    assert.deepEqual(
+      fixture.spriteCommands(`session:${page.targetId}`).at(-1),
+      { type: "outcome", ok: false },
+    );
+  });
+});
+
+test("navigation reinstalls the sprite in the new document", async () => {
+  await withFixture(async (fixture) => {
+    const task = taskForRound(fixture, "round-a");
+    const page = await openTestPage(task, "https://example.test/first");
+    const session = `session:${page.targetId}`;
+    fixture.spriteCalls.length = 0;
+
+    await page.goto("https://example.test/second");
+
+    const forget = fixture.spriteCalls.findIndex(
+      ([kind, sessionId]) => kind === "forget" && sessionId === session,
+    );
+    const outcome = fixture.spriteCalls.findIndex(
+      ([kind, , sessionId, command]) =>
+        kind === "send" && sessionId === session && command.type === "outcome",
+    );
+    assert(forget >= 0, "goto forgets the replaced document's sprite");
+    assert(outcome > forget, "the sprite reappears after the navigation");
+  });
+});
+
+test("Page screenshots hide the sprite only around the capture", async () => {
+  await withFixture(async (fixture) => {
+    const task = taskForRound(fixture, "round-a");
+    const page = await openTestPage(task, "https://example.test/first");
+    const session = `session:${page.targetId}`;
+    fixture.spriteCalls.length = 0;
+
+    await page.screenshot({ path: "/tmp/sprite-free.png" });
+
+    const capture = fixture.calls.findIndex(([kind]) => kind === "screenshot");
+    const hide = fixture.spriteCalls.find(([kind]) => kind === "hide");
+    const show = fixture.spriteCalls.find(([kind]) => kind === "show");
+    assert.deepEqual(hide.slice(0, 2), ["hide", session]);
+    assert.deepEqual(show.slice(0, 2), ["show", session]);
+    assert(hide[2] <= capture, "the sprite is hidden before the capture");
+    assert(show[2] > capture, "the sprite is restored after the capture");
+  });
+});
+
+test("handOff and finish remove the space's sprites before releasing control", async () => {
+  await withFixture(async (fixture) => {
+    const lifecycle = [];
+    const services = {
+      async handOffTaskSpace() {
+        lifecycle.push(["handOff", fixture.spriteCalls.length]);
+      },
+      async completeTaskSpace() {
+        lifecycle.push(["finish", fixture.spriteCalls.length]);
+      },
+      async closeTaskSpace() {
+        lifecycle.push(["close", fixture.spriteCalls.length]);
+      },
+    };
+    const disposed = (spaceId) => [
+      ["disposeSpace", spaceId],
+      ["disposed", spaceId],
+    ];
+    const task = taskForRound(fixture, "round-a", services);
+    await openTestPage(task, "https://example.test/first");
+    fixture.spriteCalls.length = 0;
+
+    await task.handOff();
+    assert.deepEqual(
+      fixture.spriteCalls.map(([kind, id]) => [kind, id]),
+      disposed(task.spaceId),
+    );
+    assert.deepEqual(
+      lifecycle.at(-1),
+      ["handOff", 2],
+      "dispose settles before the native handOff",
+    );
+
+    for (const keep of ["all", []]) {
+      const finishing = taskForRound(fixture, "round-" + keep, services);
+      await finishing.newPage();
+      fixture.spriteCalls.length = 0;
+      await finishing.finish({ keep });
+      assert.deepEqual(
+        fixture.spriteCalls.map(([kind, id]) => [kind, id]),
+        disposed(task.spaceId),
+      );
+      assert.equal(
+        lifecycle.at(-1)[1],
+        2,
+        `dispose settles before the native ${lifecycle.at(-1)[0]}`,
+      );
+    }
+  });
+});
+
+test("a broken sprite renderer cannot fail or slow a Page action", async () => {
+  await withFixture(async (fixture) => {
+    const exploding = {
+      send() {
+        throw new Error("sprite exploded");
+      },
+      forget() {
+        throw new Error("sprite exploded");
+      },
+      async hideDuring() {
+        throw new Error("sprite exploded");
+      },
+      disposeSpace() {
+        throw new Error("sprite exploded");
+      },
+    };
+    const task = taskForRound(fixture, "round-a", {
+      agentSprite: exploding,
+      async handOffTaskSpace() {},
+    });
+    const page = await openTestPage(task, "https://example.test/first");
+
+    assert.deepEqual(await page.click("#cauldron", { label: "Boo" }), {});
+    await page.fill("#text-input", "boo");
+    assert.equal(
+      await page.screenshot({ path: "/tmp/with-broken-sprite.png" }),
+      "/tmp/with-broken-sprite.png",
+    );
+    await task.handOff();
   });
 });

@@ -14,6 +14,7 @@ import { pageDragAndDrawCase } from "./page-drag-and-draw.mjs";
 import { pageJavaScriptDialogHandlingCase } from "./page-dialogs.mjs";
 import { pageMediaPlaybackCase } from "./page-media-playback.mjs";
 import { pageScrolledScreenshotCase } from "./page-screenshot.mjs";
+import { pageAgentSpriteCase } from "./page-agent-sprite.mjs";
 import {
   pageDefaultScreenshotPathFirstRunCase,
   pageDefaultScreenshotPathSecondRunCase,
@@ -144,6 +145,7 @@ export const e2eCases = [
   },
   { name: "Page media playback", body: pageMediaPlaybackCase },
   { name: "Page scrolled screenshot", body: pageScrolledScreenshotCase },
+  { name: "Halloween agent sprite", body: pageAgentSpriteCase },
   {
     name: "Page default screenshot path: first run",
     body: pageDefaultScreenshotPathFirstRunCase,
